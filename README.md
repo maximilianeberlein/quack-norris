@@ -10,7 +10,7 @@ cd ~/code/catkin_ws                          # Navigate to the workspace
 catkin build apriltag_ros quack-norris   # Build all relevant packages in the workspace
 ```
 
-Launch AprilTag Detection Node
+2. Launch AprilTag Detection Node
 ```
 roslaunch quack-norris main_node.launch 
 ```
