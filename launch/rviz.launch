@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<launch>
+    <!-- Launch the simulator -->
+    <include file="$(find simulator)/launch/simulator.launch">
+        <arg name="package_param_path" value="$(find quack-norris)/rviz/simulation_params"/>
+    </include>
+
+    <!-- Launch RViz - TODO: Remove this launch file and add to main launch -->
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find quack-norris)/rviz/duckie.rviz" output="log"/>
+
+    <!-- Launch the Duckiebot pose publisher Node -->
+    <node name="run_duckie_rviz" pkg="quack-norris" type="run_duckie_node.py" output="screen"/>
+</launch>

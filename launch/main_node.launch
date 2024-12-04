@@ -1,5 +1,7 @@
 <launch>
     <!-- Arguments -->
+    <!-- Run rviz and simulator. Launch with "visualize:=true" to enable-->
+    <arg name="visualize" default="false"/>
     <!-- <arg name="cam_frame" default="camera_frame" /> -->
 
     <!-- Launch the AprilTag Detector Node -->
@@ -25,6 +27,9 @@
         <param name="tag_refine_decode" type="bool" value="false" />
         <param name="tag_refine_pose" type="bool" value="false" />
         <param name="tag_debug" type="bool" value="true" />
-
     </node>
+
+    <group if="$(arg visualize)">
+        <include file="$(find quack-norris)/launch/rviz.launch"/>
+    </group>
 </launch>
