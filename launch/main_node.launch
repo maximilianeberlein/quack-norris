@@ -3,9 +3,9 @@
     <!-- <arg name="cam_frame" default="camera_frame" /> -->
 
     <!-- Launch the AprilTag Detector Node -->
-    <node pkg="line_detection" type="main_node.py" name="main_node" output="screen" />
+    <node pkg="quack-norris" type="main_node.py" name="main_node" output="screen" />
     
-    <rosparam command="load" file="$(find line_detection)/params/apriltags.yaml" ns="apriltags" />
+    <rosparam command="load" file="$(find quack-norris)/params/apriltags.yaml" ns="apriltags" />
 
     <!-- Launch the apriltags2_ros Node -->
     <node pkg="apriltag_ros" type="apriltag_ros_continuous_node" name="apriltags" 
