@@ -45,6 +45,8 @@ class MainNode:
         # Define the wheel command message
         self.wheel_cmd = WheelsCmdStamped()
 
+        rospy.on_shutdown(self.shutdown_duckie)
+
         rospy.loginfo("AprilTag Detector Node initialized.")
 
     def calib_callback(self, msg):
@@ -143,6 +145,11 @@ class MainNode:
         self.wheel_cmd.vel_left = -self.forward_speed #* (1 - self.wheel_distance / (2 * self.radius))
         self.wheel_cmd.vel_right = -self.forward_speed  #* (1 + self.wheel_distance / (2 * self.radius))
         self.pub_wheels.publish(self.wheel_cmd)
+
+    def shutdown_duckie(self):
+        rospy.loginfo("Shutting down... stopping the robot.")
+        self.pub_wheels.publish(WheelsCmdStamped())
+        rospy.sleep(1)  # Allow time for the message to propagate
     
     def run(self):
         rospy.spin()

@@ -1,0 +1,10 @@
+maps:
+  - name: lap_big
+    plane_width: 4.68
+    mesh_path: "file:///code/catkin_ws/src/user_code/quack-norris/map_files/lap_big.dae"
+  - name: lap_middle
+    plane_width: 2.88
+    mesh_path: "file:///code/catkin_ws/src/user_code/quack-norris/map_files/lap_middle.dae"
+  - name: lap_small
+    plane_width: 1.7
+    mesh_path: "file:///code/catkin_ws/src/user_code/quack-norris/map_files/lap_small.dae"

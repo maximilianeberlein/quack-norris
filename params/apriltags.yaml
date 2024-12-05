@@ -19,8 +19,8 @@
 #   ]
 standalone_tags:
   [
-    {id: 58, size: 0.065, name: Backward, position: [0.0, 0.0], orientation: [0.0, 0.0, 0.0]}, # Orientation via normal vector
-    {id: 20, size: 0.065, name: Stop, position: [0.0, 0.0], orientation: [0.0, 0.0, 0.0]}, # Orientation via normal vector
+    {id: 58, size: 0.065, name: Backward, position: [0.0, 1.0], orientation: [-0.9063078, 0.4226183, 0.0, 0.0]}, # Orientation via normal vector
+    {id: 20, size: 0.065, name: Stop, position: [1.0, 0.0], orientation: [0.7071068, 0.7071068, 0.0, 0.0]}, # Orientation via normal vector
   ]
 
 tag_bundles:
