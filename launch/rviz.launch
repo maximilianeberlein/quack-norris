@@ -9,5 +9,5 @@
     <node name="rviz" pkg="rviz" type="rviz" args="-d $(find quack-norris)/rviz/duckie.rviz" output="log"/>
 
     <!-- Launch the Duckiebot pose publisher Node -->
-    <node name="run_duckie_rviz" pkg="quack-norris" type="run_duckie_node.py" output="screen"/>
+    <node name="run_duckie_rviz" pkg="quack-norris" type="rviz_node.py" output="screen"/>
 </launch>

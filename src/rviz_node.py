@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 
 import rospy
+import rospkg
 
 from visualization_msgs.msg import Marker
 from geometry_msgs.msg import Point, Pose, PoseStamped, Quaternion
 from duckietown_msgs.msg import WheelsCmdStamped
 from nav_msgs.msg import Path
 from tf.transformations import euler_from_quaternion
+import cv2
 import numpy as np
 from std_msgs.msg import Header
 from std_srvs.srv import Trigger, TriggerResponse
@@ -31,6 +33,12 @@ class RunDuckieRviz:
 
         # define current pose
         self.cur_pose = None
+
+        # TODO: Hardcode less!!!!
+        # Get the path to the package
+        rospack = rospkg.RosPack()
+        package_path = rospack.get_path('quack-norris')
+        self.image_path = package_path + "/map_files/quack_small.png"
 
         # initialize observed path msg
         # self.init_obs_path()
@@ -77,10 +85,58 @@ class RunDuckieRviz:
         # self.name_gt_path_pub_topic = get_rosparam("~topics/pub/gt_path/name")
         # self.name_observed_path_pub_topic = get_rosparam("~topics/pub/obs_path/name")
 
+    def publish_image_as_marker(self, image_path):
+        # Load the image
+        image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
+        if image is None:
+            rospy.logerr(f"Failed to load image: {image_path}")
+            return
+
+        # Create a marker
+        marker = Marker()
+        marker.header.frame_id = "world"
+        marker.header.stamp = rospy.Time.now()
+        marker.ns = "images"
+        marker.id = 0
+        marker.type = Marker.MESH_RESOURCE
+        marker.action = Marker.ADD
+        marker.pose.position.x = 0
+        marker.pose.position.y = 0
+        marker.pose.position.z = 0
+        marker.pose.orientation.x = 0.0
+        marker.pose.orientation.y = 0.0
+        marker.pose.orientation.z = 0.0
+        marker.pose.orientation.w = 1.0
+        marker.scale.x = 1.0
+        marker.scale.y = 1.0
+        marker.scale.z = 1.0
+        marker.color.a = 1.0  # Don't forget to set the alpha!
+        marker.color.r = 1.0
+        marker.color.g = 1.0
+        marker.color.b = 1.0
+
+        # Convert the image to a texture
+        texture = cv2.cvtColor(image, cv2.COLOR_BGRA2RGBA)
+        texture_msg = Marker()
+        texture_msg.header = marker.header
+        texture_msg.ns = marker.ns
+        texture_msg.id = marker.id + 1
+        texture_msg.type = Marker.TEXT_VIEW_FACING
+        texture_msg.action = Marker.ADD
+        texture_msg.pose = marker.pose
+        texture_msg.scale = marker.scale
+        texture_msg.color = marker.color
+        texture_msg.text = texture.tostring()
+
+        # Publish the marker
+        self.marker_pub.publish(marker)
+        self.marker_pub.publish(texture_msg)
+
     def create_publishers(self) -> None:
         """
         Create the ROS publishers.
         """
+        self.marker_pub = rospy.Publisher("visualization_marker", Marker, queue_size=10)
         self.wheel_cmd_pub = rospy.Publisher(self.name_wheel_cmd_pub_topic, WheelsCmdStamped, queue_size=10)
         # self.gt_path_pub = rospy.Publisher(self.name_gt_path_pub_topic, Path, queue_size=10)
         # self.observed_path_pub = rospy.Publisher(self.name_observed_path_pub_topic, Path, queue_size=10)
@@ -120,6 +176,7 @@ class RunDuckieRviz:
             wheel_cmd.vel_left = 0.0
             wheel_cmd.vel_right = 0.0
             self.wheel_cmd_pub.publish(wheel_cmd)
+            self.publish_image_as_marker(self.image_path)
             self.rate.sleep()
 
 

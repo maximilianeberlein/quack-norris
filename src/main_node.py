@@ -10,7 +10,6 @@ from duckietown_msgs.msg import WheelsCmdStamped
 from std_msgs.msg import Int32MultiArray
 from sensor_msgs.msg import CameraInfo
 
-
 from cv_bridge import CvBridge
 import os
 import yaml
@@ -78,15 +77,29 @@ class MainNode:
                 
             for detection in msg.detections:
                 tag_id = detection.id[0]
-               # rospy.loginfo(f"Detected tag ID: {tag_id}")
+                rospy.loginfo(f"Detected tag ID: {tag_id}")
                 
-                if tag_id == 20:
-                    self.stop_robot()
+                # if tag_id == 20:
+                #     self.stop_robot()
+                #     return
+                
+                # if tag_id == 58:
+                #     self.drive_backward()
+                #     return    
+
+                if tag_id in self.apriltag_data:
+                    tag_data = self.apriltag_data[tag_id]
+                    rospy.loginfo(f"Detected tag ID: {tag_id}, Name: {tag_data[0]}, Position: {tag_data[1]}, Orientation: {tag_data[2]}")
+                    # self.tag_ids_pub.publish(Int32MultiArray(data=[tag_id]))
+                    if tag_data[0] == 'Stop':
+                        self.stop_robot()
+                    # elif tag_data[1] == 'forward':
+                    #     self.drive_forward()
+                    elif tag_data[0] == 'Backward':
+                        self.drive_backward()
                     return
-                
-                if tag_id == 58:
-                    self.drive_backward()
-                    return    
+                else:
+                    rospy.logerr(f"Tag ID {tag_id} not found in the 'apriltag_data' config file.")
         
             # If no tag with ID 20 or 58 is detected, drive forward
             self.drive_forward()
@@ -98,6 +111,17 @@ class MainNode:
         # Load controller configuration
         drive_controller_file = rospy.get_param('~drive_controller_file', '/code/catkin_ws/src/user_code/quack-norris/params/drive_controller.yaml')
         self.drive_conroller_config = self.load_yaml_file(drive_controller_file)
+
+        # apriltag_data_file = rospy.get_param('~apriltag_data_file', '/code/catkin_ws/src/user_code/quack-norris/params/apriltag_data.yaml')
+        # self.apriltag_data = {}
+        # for tag in self.load_yaml_file(apriltag_data_file):
+        #     self.apriltag_data[tag['id']] = [tag['position'], tag['command']]
+
+        apriltag_data_file = rospy.get_param('~apriltag_data_file', '/code/catkin_ws/src/user_code/quack-norris/params/apriltags.yaml')
+        data = self.load_yaml_file(apriltag_data_file)
+        self.apriltag_data = {}
+        for tag in data.get('standalone_tags', []):
+            self.apriltag_data[tag['id']] = [tag['name'], tag['position'], tag['orientation']]
 
         rospy.loginfo("Configuration parameters loaded.")
 
