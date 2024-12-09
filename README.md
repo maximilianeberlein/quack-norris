@@ -1,5 +1,8 @@
 # quack-norris
-
+#prerequisites
+- ros image pipeline
+- shapely
+- 
 1. Download and build packages
 ```
 cd ~/code/catkin_ws/src                      # Navigate to the source space
