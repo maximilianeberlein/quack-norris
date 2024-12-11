@@ -7,13 +7,14 @@ from geometry_msgs.msg import Point, Quaternion, Vector3
 from apriltag_ros.msg import AprilTagDetectionArray
 from pyquaternion import Quaternion as PyQuaternion
 import numpy as np
+
 class VizNode:
     def __init__(self):
         rospy.init_node('viz_node', anonymous=True)
         
-        self.marker_pub = rospy.Publisher('visualization_marker_array', MarkerArray, queue_size=10)
-        self.duckiebot_pub = rospy.Publisher('duckiebot_marker', Marker, queue_size=10)
-        self.tag_sub = rospy.Subscriber('/tag_detections', AprilTagDetectionArray, self.tag_callback)
+        self.marker_pub = rospy.Publisher('global_map_viz', MarkerArray, queue_size=10)
+        self.duckiebot_pub = rospy.Publisher('duckiebot_viz', Marker, queue_size=10)
+        self.tag_sub = rospy.Subscriber('/tag_detections', AprilTagDetectionArray, self.self_localization_callback)
         
         self.yaml_file = rospy.get_param('~yaml_file', '/code/catkin_ws/src/user_code/quack-norris/params/apriltags.yaml')
         self.maps_yaml_file = rospy.get_param('~maps_yaml_file', '/code/catkin_ws/src/user_code/quack-norris/params/maps.yaml')
@@ -23,17 +24,16 @@ class VizNode:
         
         self.maps = self.load_maps(self.maps_yaml_file)
         self.map_params = self.get_map_params(self.maps, self.map_name)
-        self.qx = PyQuaternion(np.sqrt(0.5), np.sqrt(0.5), 0, 0)
-        self.camera_angle = PyQuaternion(0.5, 0.8660254, 0.0, 0.0)
-        self.qz = PyQuaternion(np.sqrt(0.5), 0, 0, np.sqrt(0.5))
+        self.qx = PyQuaternion(np.sqrt(0.5), np.sqrt(0.5), 0, 0) # 90 degree rot around x-axis
+        self.camera_angle = PyQuaternion(0.5, 0.8660254, 0.0, 0.0) # rot around x-axis corresponding to camera angle on duckiebot
+        self.qz = PyQuaternion(np.sqrt(0.5), 0, 0, np.sqrt(0.5)) # 90 degree rot around z-axis
         
         if not self.map_params:
             rospy.logerr(f"Map '{self.map_name}' not found in {self.maps_yaml_file}")
             return
-        
-        rospy.loginfo(f"Map parameters: {self.map_params}")
-        
+                
         self.waypoints = self.load_waypoints(self.yaml_file)
+
         self.marker_array = MarkerArray()
         self.create_markers()
         
@@ -100,7 +100,6 @@ class VizNode:
         self.marker_array.markers.append(map_marker)
         
         for waypoint in self.waypoints:
-            # Create the marker for the waypoint
             marker = Marker()
             marker.header.frame_id = "map"
             marker.header.stamp = rospy.Time.now()
@@ -111,10 +110,10 @@ class VizNode:
             marker.pose.position.x = waypoint['position'][0]
             marker.pose.position.y = waypoint['position'][1]
             marker.pose.position.z = 0.0  # Z position is zero for all waypoints
-            marker.pose.orientation.x = waypoint['orientation'][0]
-            marker.pose.orientation.y = waypoint['orientation'][1]
-            marker.pose.orientation.z = waypoint['orientation'][2]
-            marker.pose.orientation.w = waypoint['orientation'][3]
+            marker.pose.orientation.w = 0.0
+            marker.pose.orientation.x = 0.0
+            marker.pose.orientation.y = 0.0
+            marker.pose.orientation.z = 1.0
             marker.scale.x = 0.1
             marker.scale.y = 0.1
             marker.scale.z = 0.1
@@ -140,7 +139,7 @@ class VizNode:
             text_marker.pose.orientation.y = 0.0
             text_marker.pose.orientation.z = 0.0
             text_marker.pose.orientation.w = 1.0
-            text_marker.scale.z = 0.1  # Text height
+            text_marker.scale.z = 0.1 
             text_marker.color.a = 1.0
             text_marker.color.r = 1.0
             text_marker.color.g = 0.0
@@ -149,7 +148,7 @@ class VizNode:
 
             self.marker_array.markers.append(text_marker)
 
-            # Create the arrow marker for the waypoint orientation
+            # Create the arrow marker for waypoint orientation indication
             arrow_marker = Marker()
             arrow_marker.header.frame_id = "map"
             arrow_marker.header.stamp = rospy.Time.now()
@@ -160,10 +159,10 @@ class VizNode:
             arrow_marker.pose.position.x = waypoint['position'][0]
             arrow_marker.pose.position.y = waypoint['position'][1]
             arrow_marker.pose.position.z = 0.0  # Z position is zero for all waypoints
-            arrow_marker.pose.orientation.x = waypoint['orientation'][0]
-            arrow_marker.pose.orientation.y = waypoint['orientation'][1]
-            arrow_marker.pose.orientation.z = waypoint['orientation'][2]
-            arrow_marker.pose.orientation.w = waypoint['orientation'][3]
+            arrow_marker.pose.orientation.w = waypoint['orientation'][0]
+            arrow_marker.pose.orientation.x = waypoint['orientation'][1]
+            arrow_marker.pose.orientation.y = waypoint['orientation'][2]
+            arrow_marker.pose.orientation.z = waypoint['orientation'][3]
             arrow_marker.scale.x = 0.2  # Arrow length
             arrow_marker.scale.y = 0.05  # Arrow width
             arrow_marker.scale.z = 0.05  # Arrow height
@@ -174,14 +173,25 @@ class VizNode:
 
             self.marker_array.markers.append(arrow_marker)
 
-    def tag_callback(self, msg):
+    def self_localization_callback(self, msg):
+        closest_detection = None
+        min_distance = float('inf')
 
-        # Process the AprilTag detections
+        # find closest apriltag and use it for global localization
         for detection in msg.detections:
-
-            apriltag_transform = PyQuaternion(detection.pose.pose.pose.orientation.w, detection.pose.pose.pose.orientation.x, detection.pose.pose.pose.orientation.y, detection.pose.pose.pose.orientation.z)
+            position = detection.pose.pose.pose.position
+            distance = np.sqrt(position.x**2 + position.y**2 + position.z**2)
             
-            tag_id = detection.id[0]
+            if distance < min_distance:
+                min_distance = distance
+                closest_detection = detection
+
+
+        if closest_detection:
+
+            # get id of apriltag and compare it with global waypoint ids
+            tag_id = closest_detection.id[0]
+            
             matching_waypoint = None
             for waypoint in self.waypoints:
                 if waypoint['id'] == tag_id:
@@ -190,47 +200,49 @@ class VizNode:
 
             # this part needs some comments, some stuff was only found by trial and error
             if matching_waypoint:
-                rospy.loginfo(f"Detected tag ID: {tag_id}, matching waypoint: {matching_waypoint['name']}")
 
-                translated_pos = Point(
-                    -detection.pose.pose.pose.position.z,
-                    detection.pose.pose.pose.position.x,
+                camera_to_apriltag_transform = PyQuaternion(closest_detection.pose.pose.pose.orientation.w, closest_detection.pose.pose.pose.orientation.x, closest_detection.pose.pose.pose.orientation.y, closest_detection.pose.pose.pose.orientation.z)
+
+                # transform apriltag position with respect to real duckie to sim-duckie pos with respect to waypoint
+                relative_duckie_pos_sim = Point(
+                    -closest_detection.pose.pose.pose.position.z,
+                    closest_detection.pose.pose.pose.position.x,
                     0.0335
                 )
 
-                apriltag_positioning_quat = PyQuaternion(matching_waypoint['orientation'][3], matching_waypoint['orientation'][0], matching_waypoint['orientation'][1], matching_waypoint['orientation'][2])
-                reference_quat = PyQuaternion(1, 0, 0, 0)
-                rotation_difference = apriltag_positioning_quat * reference_quat.inverse
+                # get z axis rotation between waypoint and global coordinate system
+                waypoint_orientation = PyQuaternion(matching_waypoint['orientation'][3], matching_waypoint['orientation'][0], matching_waypoint['orientation'][1], matching_waypoint['orientation'][2])
+                global_map_orientation = PyQuaternion(1, 0, 0, 0)
+                yaw = (waypoint_orientation * global_map_orientation.inverse).yaw_pitch_roll[2]
+                yaw_quat = PyQuaternion(axis=[0, 0, 1], angle=yaw)
 
-                yaw = -rotation_difference.yaw_pitch_roll[0] + np.pi
-                # rospy.loginfo(f"Yaw (rotation around z-axis): {yaw}")
-                yaw_quat = PyQuaternion(axis=[0, 0, 1], angle=-yaw)
 
-                x_new = translated_pos.x * np.cos(yaw) - translated_pos.y * np.sin(yaw)
-                y_new = translated_pos.x * np.sin(yaw) + translated_pos.y * np.cos(yaw)
+                # rotate relative pos of sim-duckie to waypoint by its yaw in reference to the global coords.
+                rotated_rel_duckie_pos_sim_x = relative_duckie_pos_sim.x * np.cos(-yaw) - relative_duckie_pos_sim.y * np.sin(-yaw)
+                rotated_rel_duckie_pos_sim_y = relative_duckie_pos_sim.x * np.sin(-yaw) + relative_duckie_pos_sim.y * np.cos(-yaw)
 
+                # set global position of sim-duckie
                 self.duckiebot_marker.pose.position = Point(
-                    matching_waypoint['position'][0] + x_new,
-                    matching_waypoint['position'][1] + y_new,
+                    matching_waypoint['position'][0] + rotated_rel_duckie_pos_sim_x,
+                    matching_waypoint['position'][1] + rotated_rel_duckie_pos_sim_y,
                     0.0335
                 )
 
-                orientation = self.qz.inverse * self.qx.inverse * apriltag_transform * self.camera_angle.inverse * yaw_quat * self.qz 
+                # set orientation of sim-duckie (qz and qy rotations due to different reference coord systems of duckie in sim vs real)
+                orientation = self.qz.inverse * self.qx.inverse * camera_to_apriltag_transform * self.camera_angle.inverse * yaw_quat * self.qz 
+
+                # set global orientation of sim-duckie
                 self.duckiebot_marker.pose.orientation = Quaternion(-orientation[1], -orientation[2], -orientation[3], orientation[0])
 
+
     def run(self):
-        marker_rate = rospy.Rate(1)  # 1 Hz for markers
-        duckiebot_rate = rospy.Rate(10)  # 10 Hz for duckiebot
+        rate = rospy.Rate(10) 
 
         while not rospy.is_shutdown():
-            # Publish the marker array at a lower rate
-            if marker_rate.remaining() == 0:
-                self.marker_pub.publish(self.marker_array)
-                marker_rate.sleep()
-
-            # Publish the duckiebot marker at a higher rate
+            
+            self.marker_pub.publish(self.marker_array)
             self.duckiebot_pub.publish(self.duckiebot_marker)
-            duckiebot_rate.sleep()
+            rate.sleep()
 
 if __name__ == "__main__":
     try:

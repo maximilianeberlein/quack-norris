@@ -1,7 +1,7 @@
 <launch>
     <arg name="yaml_file" default="/code/catkin_ws/src/user_code/quack-norris/params/apriltags.yaml" />
     <arg name="maps_yaml_file" default="/code/catkin_ws/src/user_code/quack-norris/params/maps.yaml" />
-    <arg name="map_name" default="lap_big" />
+    <arg name="map_name" default="lap_small" />
 
     <node pkg="quack-norris" type="viz_node.py" name="viz_node" output="screen">
         <param name="yaml_file" value="$(arg yaml_file)" />

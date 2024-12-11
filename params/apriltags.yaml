@@ -19,8 +19,13 @@
 #   ]
 standalone_tags:
   [
-    {id: 58, size: 0.065, name: Backward, position: [0.0, 1.0], orientation: [-0.9063078, 0.4226183, 0.0, 0.0]}, # Orientation via normal vector
-    {id: 20, size: 0.065, name: Stop, position: [1.0, 0.0], orientation: [0.7071068, 0.7071068, 0.0, 0.0]}, # Orientation via normal vector
+    {id: 58, size: 0.065, name: Right Turn, position: [-0.5, -0.5], orientation: [0.7071068, 0.0, 0.0, -0.7071068]}, # [w,x,y,z] Orientation in global frame
+    {id: 20, size: 0.065, name: Stop, position: [-0.5, -1.1], orientation: [0.0, 0.0, 0.0, 1.0]}, # [w,x,y,z] Orientation in global frame
+    {id: 2, size: 0.065, name: Yield, position: [-1.1, -1.1], orientation: [0.7071068, 0.0, 0.0, 0.7071068]}, # [w,x,y,z] Orientation in global frame
+    {id: 96, size: 0.065, name: Slow Xing, position: [-1.1, -0.5], orientation: [1.0, 0.0, 0.0, 0.0]}, # [w,x,y,z] Orientation in global frame
+    #  {id: 2, size: 0.065, name: Yield, position: [1.0, 1.0], orientation: [-0.9063078, 0.4226183, 0.0, 0.0]}, # Orientation via normal vector
+    # {id: 96, size: 0.065, name: Slow Xing, position: [1.0, -1.0], orientation: [0.7071068, 0.7071068, 0.0, 0.0]}, # Orientation via normal vector
+  
   ]
 
 tag_bundles:
