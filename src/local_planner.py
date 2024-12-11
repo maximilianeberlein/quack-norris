@@ -35,11 +35,13 @@ class LocalPlannerNode:
         self.segment = None
         self.path = None
         self.tag_position = None
+        self.tag_id = None 
         self.tag_orientation = None
         #subscribers
         self.tag_info_sub = rospy.Subscriber(f'/{self.bot_name}/tag_info', TagInfo, self.tag_info_cb, queue_size=1)
 
         #publishers
+        self.wheel_cmd_pub = rospy.Publisher(f'/{self.bot_name}/wheels_driver_node/wheels_cmd', WheelsCmdStamped, queue_size=1)
         self.image_pub = rospy.Publisher(f'/{self.bot_name}/map_segment', Image, queue_size=1)
     def load_yaml_file(self, file_path):
         with open(file_path, 'r') as file:
@@ -52,6 +54,7 @@ class LocalPlannerNode:
     
     def tag_info_cb(self, data):
         tag_id = data.tag_id
+        self.tag_id = tag_id
         self.tag_position = [data.x, data.y,data.z]
         self.tag_orientation = np.deg2rad(-data.angle)
 
@@ -127,12 +130,20 @@ class LocalPlannerNode:
             self.apriltag_data[tag['id']] = [tag['name'], tag['position'], tag['orientation']]
 
         rospy.loginfo("Configuration parameters loaded.")
-
+    
     def controller(self):
         rate = rospy.Rate(10)
         rospy.wait_for_message(f'/{self.bot_name}/tag_info', TagInfo)
         while not rospy.is_shutdown():
-            # Implement your controller here
+            # replace this with actual controller logic
+            
+            if self.tag_position[0] < -0.10 and self.tag_position[2] < 0.25:
+                rospy.loginfo("Reached tag, no go brrrrr")
+                self.wheel_cmd_pub.publish(WheelsCmdStamped(header=rospy.Header(), vel_left=0.05, vel_right=0.15))
+                
+            else:
+                rospy.loginfo("Moving to tag")
+                self.wheel_cmd_pub.publish(WheelsCmdStamped(header=rospy.Header(), vel_left=0.1, vel_right=0.1))
             rospy.loginfo("Controller running")
             rate.sleep()
 

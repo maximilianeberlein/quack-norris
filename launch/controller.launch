@@ -1,0 +1,10 @@
+<launch>
+    <arg name="visualize" default="false"/>
+    
+    <node name="odom_node" pkg="quack_norris" type="odom.py" output="screen"/>
+    <node name="controller_node" pkg="quack_norris" type="controller.py" output="screen"/>
+    <node name="wheel_speed_controller_node" pkg="quack_norris" type="wheel_speed_controller.py" output="screen"/>
+    <!-- <group if="$(arg visualize)">
+        <include file="$(find quack_norris)/launch/rviz.launch"/>
+    </group> -->
+</launch>
