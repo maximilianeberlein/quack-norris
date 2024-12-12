@@ -8,4 +8,5 @@
         <param name="maps_yaml_file" value="$(arg maps_yaml_file)" />
         <param name="map_name" value="$(arg map_name)" />
     </node>
+    
 </launch>
