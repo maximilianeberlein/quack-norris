@@ -4,15 +4,14 @@ import rospy
 import cv2
 import numpy as np
 from apriltag_ros.msg import AprilTagDetectionArray
-from sensor_msgs.msg import CompressedImage, Image
+from sensor_msgs.msg import CompressedImage, Image, CameraInfo
 from geometry_msgs.msg import PoseStamped
 from duckietown_msgs.msg import WheelsCmdStamped
 from std_msgs.msg import Int32MultiArray
-from sensor_msgs.msg import CameraInfo
-
 from cv_bridge import CvBridge
 import os
 import yaml
+import message_filters
 
 class MainNode:
     def __init__(self):
@@ -33,9 +32,13 @@ class MainNode:
         self.wheel_distance = self.drive_conroller_config['drive_params']['wheel_distance']
         
         # Subscribers
-        self.image_sub = rospy.Subscriber(f'/{self.bot_name}/camera_node/image/compressed', CompressedImage, self.image_callback)
-        self.calibration_sub = rospy.Subscriber(f'/{self.bot_name}/camera_node/camera_info', CameraInfo, self.calib_callback)
+        image_sub = message_filters.Subscriber(f'/{self.bot_name}/camera_node/image/compressed', CompressedImage)
+        calib_sub = message_filters.Subscriber(f'/{self.bot_name}/camera_node/camera_info', CameraInfo)
         self.tag_sub = rospy.Subscriber('/tag_detections', AprilTagDetectionArray, self.tag_callback)
+
+        # Synchronize the image and camera info messages
+        ts = message_filters.ApproximateTimeSynchronizer([image_sub, calib_sub], queue_size=10, slop=0.1, )
+        ts.registerCallback(self.image_callback)
 
         # Publishers
         self.pub_wheels = rospy.Publisher(f'/{self.bot_name}/wheels_driver_node/wheels_cmd', WheelsCmdStamped, queue_size=10)
@@ -57,21 +60,21 @@ class MainNode:
             self.map1, self.map2 = cv2.initUndistortRectifyMap(self.camera_matrix, self.dist_coeffs, None, self.new_camera_matrix, (msg.width, msg.height), 5)
             rospy.loginfo("Camera calibration parameters received.")
 
-    def image_callback(self, msg):
+    def image_callback(self, image_msg, calib_msg):
         
         if self.map1 is None or self.map2 is None:
-            rospy.logwarn("Camera calibration parameters not yet received.")
-            return
+            self.calib_callback(calib_msg)
         
         # Convert the image from ROS format to OpenCV format
-        image = self.bridge.compressed_imgmsg_to_cv2(msg, desired_encoding="mono8")
+        image = self.bridge.compressed_imgmsg_to_cv2(image_msg, desired_encoding="mono8")
         
         # Rectify the image
         rectified_image = cv2.remap(image, self.map1, self.map2, cv2.INTER_LINEAR)
         
         # Convert the rectified image back to ROS format
         rect_img = self.bridge.cv2_to_imgmsg(rectified_image, encoding="mono8")
-        rect_img.header = msg.header
+        rect_img.header = image_msg.header
+    
         self.rect_pub.publish(rect_img)
 
     def tag_callback(self, msg):
@@ -81,27 +84,27 @@ class MainNode:
                 tag_id = detection.id[0]
                 rospy.loginfo(f"Detected tag ID: {tag_id}")
                 
-                # if tag_id == 20:
-                #     self.stop_robot()
-                #     return
+                if tag_id == 20:
+                    self.stop_robot()
+                    return
                 
                 # if tag_id == 58:
                 #     self.drive_backward()
                 #     return    
 
-                if tag_id in self.apriltag_data:
-                    tag_data = self.apriltag_data[tag_id]
-                    rospy.loginfo(f"Detected tag ID: {tag_id}, Name: {tag_data[0]}, Position: {tag_data[1]}, Orientation: {tag_data[2]}")
-                    # self.tag_ids_pub.publish(Int32MultiArray(data=[tag_id]))
-                    if tag_data[0] == 'Stop':
-                        self.stop_robot()
-                    # elif tag_data[1] == 'forward':
-                    #     self.drive_forward()
-                    elif tag_data[0] == 'Backward':
-                        self.drive_backward()
-                    return
-                else:
-                    rospy.logerr(f"Tag ID {tag_id} not found in the 'apriltag_data' config file.")
+                # if tag_id in self.apriltag_data:
+                #     tag_data = self.apriltag_data[tag_id]
+                #     rospy.loginfo(f"Detected tag ID: {tag_id}, Name: {tag_data[0]}, Position: {tag_data[1]}, Orientation: {tag_data[2]}")
+                #     # self.tag_ids_pub.publish(Int32MultiArray(data=[tag_id]))
+                #     if tag_data[0] == 'Stop':
+                #         self.stop_robot()
+                #     # elif tag_data[1] == 'forward':
+                #     #     self.drive_forward()
+                #     elif tag_data[0] == 'Backward':
+                #         self.drive_backward()
+                #     return
+                # else:
+                #     rospy.logerr(f"Tag ID {tag_id} not found in the 'apriltag_data' config file.")
         
             # If no tag with ID 20 or 58 is detected, drive forward
             self.drive_forward()

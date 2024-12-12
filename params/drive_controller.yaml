@@ -1,5 +1,5 @@
 drive_params:
   wheel_distance: 0.102
   radius: 0.1
-  forward_speed: 0.2
+  forward_speed: 0.5
   # drive_time: 2.75
