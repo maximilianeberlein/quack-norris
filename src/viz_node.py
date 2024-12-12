@@ -8,7 +8,6 @@ from apriltag_ros.msg import AprilTagDetectionArray
 from pyquaternion import Quaternion as PyQuaternion
 import numpy as np
 from nav_msgs.msg import Odometry
-from 
 
 class VizNode:
     def __init__(self):
@@ -18,7 +17,7 @@ class VizNode:
         self.duckiebot_pub = rospy.Publisher('duckiebot_viz', Marker, queue_size=10)
 
         self.tag_sub = rospy.Subscriber('/tag_detections', AprilTagDetectionArray, self.self_localization_callback)    
-        self.odom_sub = rospy.Subscriber(f'/wheel_encoder/odom', Odometry, self.odom_callback)
+        self.odom_sub = rospy.Subscriber(f'/odometry/filtered', Odometry, self.odom_callback)
 
 
         self.yaml_file = rospy.get_param('~yaml_file', '/code/catkin_ws/src/user_code/quack-norris/params/apriltags.yaml')
@@ -93,13 +92,21 @@ class VizNode:
         map_marker.id = 0
         map_marker.type = Marker.MESH_RESOURCE
         map_marker.action = Marker.ADD
-        map_marker.pose.position.x = -plane_width / 2.0
-        map_marker.pose.position.y = -plane_width / 2.0
+        map_marker.pose.position.x = plane_width / 2.0
+        map_marker.pose.position.y = plane_width / 2.0
         map_marker.pose.position.z = 0.0
-        map_marker.pose.orientation.x = 0.0
-        map_marker.pose.orientation.y = 0.0
-        map_marker.pose.orientation.z = 0.0
-        map_marker.pose.orientation.w = 1.0
+        rotation_quat = PyQuaternion(axis=[0, 0, 1], angle=np.pi)
+
+        # Apply the quaternion to the map_marker orientation
+        map_marker.pose.orientation.x = rotation_quat.x
+        map_marker.pose.orientation.y = rotation_quat.y
+        map_marker.pose.orientation.z = rotation_quat.z
+        map_marker.pose.orientation.w = rotation_quat.w
+
+        # map_marker.pose.orientation.x = 0.0
+        # map_marker.pose.orientation.y = 0.0
+        # map_marker.pose.orientation.z = 0.0
+        # map_marker.pose.orientation.w = 1.0
         map_marker.scale.x = 1.0
         map_marker.scale.y = 1.0
         map_marker.scale.z = 1.0
@@ -262,7 +269,7 @@ class VizNode:
 
             if min_distance < 0.585:
                 angle = np.arctan2(closest_detection.pose.pose.pose.position.z, closest_detection.pose.pose.pose.position.x)
-                if np.radians(60) < angle < np.radians(120):
+                if np.radians(55) < angle < np.radians(125):
 
                     self.use_apriltag = True
                     # get id of apriltag and compare it with global waypoint ids
@@ -281,7 +288,7 @@ class VizNode:
 
                         # transform apriltag position with respect to real duckie to sim-duckie pos with respect to waypoint
                         relative_duckie_pos_sim = Point(
-                            -closest_detection.pose.pose.pose.position.z,
+                            closest_detection.pose.pose.pose.position.z,
                             closest_detection.pose.pose.pose.position.x,
                             0.0335
                         )
@@ -292,10 +299,11 @@ class VizNode:
                         yaw = (waypoint_orientation * global_map_orientation.inverse).yaw_pitch_roll[2]
                         yaw_quat = PyQuaternion(axis=[0, 0, 1], angle=yaw)
 
+                        rotate = -yaw + np.pi
 
                         # rotate relative pos of sim-duckie to waypoint by its yaw in reference to the global coords.
-                        rotated_rel_duckie_pos_sim_x = relative_duckie_pos_sim.x * np.cos(-yaw) - relative_duckie_pos_sim.y * np.sin(-yaw)
-                        rotated_rel_duckie_pos_sim_y = relative_duckie_pos_sim.x * np.sin(-yaw) + relative_duckie_pos_sim.y * np.cos(-yaw)
+                        rotated_rel_duckie_pos_sim_x = relative_duckie_pos_sim.x * np.cos(rotate) - relative_duckie_pos_sim.y * np.sin(rotate)
+                        rotated_rel_duckie_pos_sim_y = relative_duckie_pos_sim.x * np.sin(rotate) + relative_duckie_pos_sim.y * np.cos(rotate)
 
                         # set global position of sim-duckie
                         self.duckiebot_marker.pose.position = Point(
