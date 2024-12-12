@@ -6,9 +6,10 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Quaternion, TransformStamped
 from tf.transformations import quaternion_from_euler
 from duckietown_msgs.msg import WheelEncoderStamped
-from std_msgs.msg import Int32
+from std_msgs.msg import Float32
 import tf
 import os
+import numpy as np
 
 class OdometryNode:
     def __init__(self):
@@ -18,7 +19,8 @@ class OdometryNode:
         # Parameters
         self.wheel_radius = rospy.get_param('~wheel_radius', 0.0335)  # meters
         self.wheel_base = rospy.get_param('~wheel_base', 0.102)  # meters
-        self.ticks_per_revolution = rospy.get_param('~ticks_per_revolution', 135)
+        self.ticks_per_revolution_left = rospy.get_param('~ticks_per_revolution_left', 135)
+        self.ticks_per_revolution_right = rospy.get_param('~ticks_per_revolution_right', 145)
 
         # State
         self.x = 0.0
@@ -36,7 +38,8 @@ class OdometryNode:
         self.odom_pub = rospy.Publisher('/wheel_encoder/odom', Odometry, queue_size=10)
         self.left_ticks_sub = rospy.Subscriber(f'/{self.bot_name}/left_wheel_encoder_node/tick',WheelEncoderStamped, self.left_ticks_callback)
         self.right_ticks_sub = rospy.Subscriber(f'/{self.bot_name}/right_wheel_encoder_node/tick',WheelEncoderStamped, self.right_ticks_callback)
-
+        # self.r_error = rospy.Publisher(f'/{self.bot_name}/right_speed', Float32, queue_size=1)
+        # self.l_error = rospy.Publisher(f'/{self.bot_name}/left_speed',Float32, queue_size=1)
         self.tf_broadcaster = tf.TransformBroadcaster()
 
     def left_ticks_callback(self, msg):
@@ -56,9 +59,13 @@ class OdometryNode:
         right_ticks = self.curr_right_ticks - self.previous_right_ticks
         self.previous_left_ticks = self.curr_left_ticks
         self.previous_right_ticks = self.curr_right_ticks
-        left_distance = (2 * 3.14159 * self.wheel_radius * left_ticks) / self.ticks_per_revolution
-        right_distance = (2 * 3.14159 * self.wheel_radius * right_ticks) / self.ticks_per_revolution
-
+        
+        left_distance = (2 * np.pi * self.wheel_radius * left_ticks) / self.ticks_per_revolution_left
+        right_distance = (2 * np.pi * self.wheel_radius * right_ticks) / self.ticks_per_revolution_right
+        l_speed = Float32(left_distance/dt)
+        r_speed = Float32(right_distance/dt)
+        # self.l_error.publish(l_speed)
+        # self.r_error.publish(r_speed)
         # Compute linear and angular velocity
         linear_velocity = (left_distance + right_distance) / (2.0 * dt)
         angular_velocity = (right_distance - left_distance) / (self.wheel_base * dt)
@@ -71,7 +78,7 @@ class OdometryNode:
         # Publish odometry
         odom = Odometry()
         odom.header.stamp = current_time
-        odom.header.frame_id = "odom"
+        odom.header.frame_id = "map"
         odom.child_frame_id = "base_link"
 
         odom.pose.pose.position.x = self.x

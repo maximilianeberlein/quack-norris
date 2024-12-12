@@ -107,7 +107,7 @@ class MainNode:
                 #     rospy.logerr(f"Tag ID {tag_id} not found in the 'apriltag_data' config file.")
         
             # If no tag with ID 20 or 58 is detected, drive forward
-            self.drive_forward()
+            #self.drive_forward()
         except Exception as e:
             rospy.logerr(f"Error in image_callback: {e}")
     

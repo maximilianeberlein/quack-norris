@@ -33,7 +33,7 @@ class OdometryToTF:
             translation,
             rotation,
             rospy.Time.now(),
-            "base_link",
+            "base",
             "odom"
         )
 

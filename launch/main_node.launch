@@ -4,13 +4,16 @@
     <arg name="visualize" default="false"/>
     <!-- <arg name="cam_frame" default="camera_frame" /> -->
 
-    <!-- Launch the AprilTag Detector Node -->
-    <node pkg="quack_norris" type="local_map_getter.py" name="local_map_node" output="screen" />
+    <node name="odom_node" pkg="quack_norris" type="odom.py" output="screen"/>
+    <node pkg="robot_localization" type="ekf_localization_node" name="ekf_localization" output="screen">
+        <rosparam command="load" file="$(find quack_norris)/config/ekf_config.yaml"/>
+    </node>
+    <node pkg="quack_norris" type="main_node.py" name="main_node" output="screen" />
 
     <rosparam command="load" file="$(find quack_norris)/params/apriltags.yaml" ns="apriltags" />
 
     <!-- Launch the local planner node -->
-    <node pkg="quack_norris" type="local_planner.py" name="local_planner_node" output="screen" />
+    <!-- <node pkg="quack_norris" type="local_planner.py" name="local_planner_node" output="screen" /> -->
     <rosparam command="load" file="$(find quack_norris)/params/tag_map.yaml" ns="tag_map" />
 
     
