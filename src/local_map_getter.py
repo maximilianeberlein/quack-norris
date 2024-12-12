@@ -107,7 +107,6 @@ class LocalMapNode:
             if matching_waypoint:
                 #rospy.loginfo(f"Detected tag ID: {tag_id}, matching waypoint: {matching_waypoint['name']}")
 
-                print('got towards publishing')
                 quaternion_q = detection.pose.pose.pose.orientation
                 roll,pitch,yaw = euler_from_quaternion([quaternion_q.x,quaternion_q.y,quaternion_q.z,quaternion_q.w])
                 #rospy.loginfo(f"Yaw: {np.rad2deg(yaw)}, Pitch: {np.rad2deg(pitch)}, Roll: {np.rad2deg(roll)}")

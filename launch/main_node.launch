@@ -10,7 +10,9 @@
     </node>
     <!-- launch odom repuber -->
     <node pkg="quack_norris" type="ekf_repub.py" name="odom_repuber" output="screen"/>
-    <node pkg="quack_norris" type="main_node.py" name="main_node" output="screen" />
+    <!-- <node pkg="quack_norris" type="main_node.py" name="main_node" output="screen" /> -->
+    <node pkg="quack_norris" type="dubins.py" name="dubins" output="screen" />
+    <node pkg="quack_norris" type="local_map_getter.py" name="tags" output="screen" />
 
     <rosparam command="load" file="$(find quack_norris)/params/apriltags.yaml" ns="apriltags" />
 
@@ -42,5 +44,6 @@
     <group if="$(arg visualize)">
         <include file="$(find quack_norris)/launch/rviz.launch"/>
     </group>
+
     <node pkg="tf" type="static_transform_publisher" name="map_to_odom" args="0 0 0 0 0 0 map odom 100" />
 </launch>
