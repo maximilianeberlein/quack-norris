@@ -8,7 +8,7 @@ from apriltag_ros.msg import AprilTagDetectionArray
 from pyquaternion import Quaternion as PyQuaternion
 import numpy as np
 from nav_msgs.msg import Odometry
-from 
+
 
 class VizNode:
     def __init__(self):
