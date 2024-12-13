@@ -63,7 +63,7 @@ class DubinsNode:
         self.tag_distance = 10
         self.path = hardcoded_path
         self.node_lookahead = 6*a
-        self.waypoint_lookahead = 8*a
+        self.waypoint_lookahead = 9*a
         self.next_node = None
         self.node_in_scope = False
         self.tag_present = False
@@ -115,7 +115,6 @@ class DubinsNode:
         for segment in duckie_path:
             for obstacle in obstacles:
                 if segment.shapely_path.intersects(obstacle):
-                    print(f"Collision detected with obstacle {obstacle}")
                     collision = True
                     break
         return collision
@@ -268,6 +267,24 @@ class DubinsNode:
 
             self.marker_pub.publish(marker)
             segment_id += 1
+        
+        # Publish the last corner radius
+        if self.corner:
+            corner_marker = Marker()
+            corner_marker.header.frame_id = "map"
+            corner_marker.header.stamp = rospy.Time.now()
+            corner_marker.ns = "dubins_path"
+            corner_marker.id = segment_id
+            corner_marker.type = Marker.SPHERE
+            corner_marker.action = Marker.ADD
+            corner_marker.scale.x = self.corner.radius * 2
+            corner_marker.scale.y = self.corner.radius * 2
+            corner_marker.scale.z = 0.01  # Flat sphere
+            corner_marker.color = ColorRGBA(1.0, 0.0, 0.0, 0.5)  # Red color, semi-transparent
+            corner_marker.pose.position.x = self.corner.pose.x
+            corner_marker.pose.position.y = self.corner.pose.y
+            corner_marker.pose.position.z = 0.0
+            self.marker_pub.publish(corner_marker)
     
     def pure_pursuit_control(self, path, lookahead_distance, wheelbase, speed):
     # Extract the path points
@@ -306,15 +323,23 @@ class DubinsNode:
 
         
         
-        l_speed = (speed - (steering_angle * wheelbase / 2))*gain/0.75
-        r_speed = (speed + (steering_angle * wheelbase / 2))*gain/0.75
+        l_speed = (speed - (steering_angle * wheelbase / 2))*gain/0.5
+        r_speed = (speed + (steering_angle * wheelbase / 2))*gain/0.5
 
         return l_speed, r_speed
 
     def check_completion(self):
         dist_to_end = np.sqrt((self.se_pose.x - self.pursuit_path[-1,0])**2 + (self.se_pose.y - self.pursuit_path[-1,1])**2)
-        if dist_to_end < 0.2:
+        if dist_to_end < 0.1:
+            wheels_cmd = WheelsCmdStamped()
+            wheels_cmd.header.stamp = rospy.Time.now()
+            wheels_cmd.vel_left = 0
+            wheels_cmd.vel_right = 0
+            self.wheel_cmd_pub.publish(wheels_cmd)
+
             rospy.loginfo("Path completed")
+            rospy.sleep(1)
+            rospy.loginfo("running dubs = False")
             self.running_dubs = False
     def shutdown_duckie(self):
         rospy.loginfo("Shutting down... stopping the robot.")
@@ -349,15 +374,24 @@ class DubinsNode:
 
             lookahead_point = self.get_line_lookahead()
             if lookahead_point and self.do_dubins and not self.running_dubs:
+                wheels_cmd = WheelsCmdStamped()
+                wheels_cmd.header.stamp = rospy.Time.now()
+                wheels_cmd.vel_left = 0
+                wheels_cmd.vel_right =0
+                self.wheel_cmd_pub.publish(wheels_cmd)
+                rospy.sleep(1)
+
                 # rospy.loginfo(f"Lookahead Point: x={lookahead_point.x}, y={lookahead_point.y}")
                 dub = dubins(self.se_pose,lookahead_point,3,0.3,0.2,0.2)
                 self.duckie_path = dub.solve()
                 if self.check_collision([self.corner.shapely_obs],self.duckie_path):
                     rospy.loginfo("Collision detected, recalculating path")
                     dub1 =  dubins(self.se_pose,self.corner.placement,3,0.3,0.2,self.corner.radius)
-                    self.duckie_path = dub1.solve()
+                    path1 = dub1.solve()
                     dub2 = dubins(self.corner.placement,lookahead_point,3,0.3,self.corner.radius,0.2)
-                    self.duckie_path += dub2.solve()
+                    path2= dub2.solve()
+                    self.duckie_path = np.concatenate((path1,path2)) 
+                    print(self.duckie_path)
                 self.publish_path_markers()
 
                 temp_path_array= np.empty((0,3))
@@ -366,6 +400,7 @@ class DubinsNode:
                     temp_path_array = np.vstack((temp_path_array, partial))
                 self.pursuit_path = temp_path_array
                 self.running_dubs = True
+                self.do_dubins = False
             elif not self.do_dubins and not self.running_dubs:
                 self.duckie_path =  [DuckieSegment(self.se_pose, lookahead_point, 0, 'STRAIGHT',sg.LineString([(self.se_pose.x,self.se_pose.y), (lookahead_point.x, lookahead_point.y)]),cost = 1)]
                 self.publish_path_markers()
@@ -375,7 +410,7 @@ class DubinsNode:
                     temp_path_array = np.vstack((temp_path_array, partial))
                 self.pursuit_path = temp_path_array
 
-            l_speed, r_speed =self.pure_pursuit_control(self.pursuit_path, 0.04, 0.102, 0.1)
+            l_speed, r_speed =self.pure_pursuit_control(self.pursuit_path, 0.04, 0.102, 0.2)
             wheels_cmd = WheelsCmdStamped()
             wheels_cmd.header.stamp = rospy.Time.now()
             wheels_cmd.vel_left = l_speed

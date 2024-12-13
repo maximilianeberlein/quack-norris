@@ -18,10 +18,10 @@ class OdometryNode:
 
         self.bot_name = os.environ.get("VEHICLE_NAME")
         # Parameters
-        self.wheel_radius = rospy.get_param('~wheel_radius', 0.0335)  # meters
+        self.wheel_radius = rospy.get_param('~wheel_radius', 0.0365)  # meters
         self.wheel_base = rospy.get_param('~wheel_base', 0.102)  # meters
         self.ticks_per_revolution_left = rospy.get_param('~ticks_per_revolution_left', 135)
-        self.ticks_per_revolution_right = rospy.get_param('~ticks_per_revolution_right', 150)
+        self.ticks_per_revolution_right = rospy.get_param('~ticks_per_revolution_right', 145)
 
         # State
         self.x = 0.585
