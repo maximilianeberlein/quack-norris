@@ -127,6 +127,7 @@ class LocalMapNode:
                 tag_info.y = detection.pose.pose.pose.position.y
                 tag_info.z = detection.pose.pose.pose.position.z
                 tag_info.angle = np.rad2deg(pitch)
+                # rospy.loginfo(f"Tag ID: {tag_id}")
                 self.tag_info_pub.publish(tag_info)
 
 

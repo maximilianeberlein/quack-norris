@@ -7,6 +7,7 @@ from geometry_msgs.msg import Quaternion, TransformStamped, PoseWithCovarianceSt
 from tf.transformations import quaternion_from_euler, euler_from_quaternion
 from duckietown_msgs.msg import WheelEncoderStamped
 from std_msgs.msg import Float32
+from sensor_msgs.msg import Imu
 import tf
 import os
 import numpy as np
@@ -21,7 +22,7 @@ class OdometryNode:
         self.wheel_radius = rospy.get_param('~wheel_radius', 0.0365)  # meters
         self.wheel_base = rospy.get_param('~wheel_base', 0.102)  # meters
         self.ticks_per_revolution_left = rospy.get_param('~ticks_per_revolution_left', 135)
-        self.ticks_per_revolution_right = rospy.get_param('~ticks_per_revolution_right', 145)
+        self.ticks_per_revolution_right = rospy.get_param('~ticks_per_revolution_right', 135)
 
         # State
         self.x = 0.585
@@ -34,9 +35,12 @@ class OdometryNode:
         self.curr_right_ticks = 0
         self.previous_left_ticks = 0
         self.previous_right_ticks = 0
-
+        
+        self.imu_yaw_vel_array = []
+        self.imu_yaw_vel = 0.0
         # Publishers and Subscribers
         self.odom_pub = rospy.Publisher('/wheel_encoder/odom', Odometry, queue_size=10)
+        self.imu_sub = rospy.Subscriber(f'/{self.bot_name}/imu_node/data', Imu, self.imu_callback)
         self.left_ticks_sub = rospy.Subscriber(f'/{self.bot_name}/left_wheel_encoder_node/tick',WheelEncoderStamped, self.left_ticks_callback)
         self.right_ticks_sub = rospy.Subscriber(f'/{self.bot_name}/right_wheel_encoder_node/tick',WheelEncoderStamped, self.right_ticks_callback)
         self.get_global_pose = rospy.Subscriber(f'/duckiebot_globalpose', PoseWithCovarianceStamped, self.global_pose_callback)
@@ -44,7 +48,11 @@ class OdometryNode:
         # self.r_error = rospy.Publisher(f'/{self.bot_name}/right_speed', Float32, queue_size=1)
         # self.l_error = rospy.Publisher(f'/{self.bot_name}/left_speed',Float32, queue_size=1)
         self.tf_broadcaster = tf.TransformBroadcaster()
-
+    def imu_callback(self, msg):
+        rot_vel = msg.angular_velocity
+        yaw_vel = rot_vel.z
+        self.imu_yaw_vel_array.append(yaw_vel)
+        self.imu_yaw_vel = np.mean(self.imu_yaw_vel_array)
     def left_ticks_callback(self, msg):
         self.curr_left_ticks = msg.data
 
@@ -86,8 +94,8 @@ class OdometryNode:
         # self.r_error.publish(r_speed)
         # Compute linear and angular velocity
         linear_velocity = (left_distance + right_distance) / (2.0 * dt)
-        angular_velocity = (right_distance - left_distance) / (self.wheel_base * dt)
-
+        angular_velocity = self.imu_yaw_vel
+        self.imu_yaw_vel_array = []
         # Update pose
         self.theta += angular_velocity * dt
         self.x += linear_velocity * dt * np.cos(self.theta)

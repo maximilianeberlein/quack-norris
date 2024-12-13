@@ -17,7 +17,7 @@ class VizNode:
         
         self.marker_pub = rospy.Publisher('global_map_viz', MarkerArray, queue_size=10)
         self.duckiebot_pub = rospy.Publisher('duckiebot_viz', Marker, queue_size=10)
-        self.globalpose_pub = rospy.Publisher('duckiebot_globalpose', PoseWithCovarianceStamped, queue_size=10)
+        self.globalpose_pub = rospy.Publisher('duckiebot_globalpose', PoseWithCovarianceStamped, queue_size=1)
 
         self.tag_sub = rospy.Subscriber('/tag_detections', AprilTagDetectionArray, self.self_localization_callback)    
         self.odom_sub = rospy.Subscriber(f'/odometry/filtered', Odometry, self.odom_callback)
@@ -393,8 +393,8 @@ class VizNode:
 
         while not rospy.is_shutdown():
             
-            self.marker_pub.publish(self.marker_array)
-            self.duckiebot_pub.publish(self.duckiebot_marker)
+            # self.marker_pub.publish(self.marker_array)
+            # self.duckiebot_pub.publish(self.duckiebot_marker)
 
 
             rate.sleep()

@@ -24,7 +24,7 @@ p3 = SETransform(19*a, 11*a, np.pi/2)
 p4 = SETransform(a, 11*a, np.pi)
 
 p1 = DuckieNode(p1, tag_id=58)
-p2 = DuckieNode(p2, tag_id=96)
+p2 = DuckieNode(p2, tag_id=74)
 p3 = DuckieNode(p3, tag_id=2)
 p4 = DuckieNode(p4, tag_id=20)
 
@@ -63,7 +63,7 @@ class DubinsNode:
         self.tag_distance = 10
         self.path = hardcoded_path
         self.node_lookahead = 6*a
-        self.waypoint_lookahead = 9*a
+        self.waypoint_lookahead = 9.5*a
         self.next_node = None
         self.node_in_scope = False
         self.tag_present = False
@@ -330,7 +330,9 @@ class DubinsNode:
 
     def check_completion(self):
         dist_to_end = np.sqrt((self.se_pose.x - self.pursuit_path[-1,0])**2 + (self.se_pose.y - self.pursuit_path[-1,1])**2)
-        if dist_to_end < 0.1:
+        angle_deviation = np.abs(self.se_pose.theta - self.pursuit_path[-1,2])
+        print(f"Distance to end: {dist_to_end}, Angle deviation: {angle_deviation}, target angle: {self.pursuit_path[-1,2]}")
+        if dist_to_end <0.07:
             wheels_cmd = WheelsCmdStamped()
             wheels_cmd.header.stamp = rospy.Time.now()
             wheels_cmd.vel_left = 0
