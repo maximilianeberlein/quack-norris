@@ -48,7 +48,7 @@ class LocalMapNode:
         self.pub_wheels = rospy.Publisher(f'/{self.bot_name}/wheels_driver_node/wheels_cmd', WheelsCmdStamped, queue_size=10)
         self.rect_pub = rospy.Publisher(f'/{self.bot_name}/camera_node/rect', Image, queue_size=1)
         self.tag_ids_pub = rospy.Publisher(f'/{self.bot_name}/detected_tags', Int32MultiArray, queue_size=10)
-        self.tag_info_pub = rospy.Publisher(f'/{self.bot_name}/tag_info', TagInfo, queue_size=10)
+        self.tag_info_pub = rospy.Publisher(f'/{self.bot_name}/tag_info', TagInfo, queue_size=1)
         # Define the wheel command message
         self.wheel_cmd = WheelsCmdStamped()
         self.waypoints = self.load_waypoints(self.yaml_file)

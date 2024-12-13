@@ -17,11 +17,11 @@ import numpy as np
 from quack_norris_utils.utils import dubins, SETransform, DuckieObstacle, DuckieNode, DuckieSegment, DuckieCorner
 from visualization_msgs.msg import Marker
 
-a = 0.585/2
+a = 0.585/4
 p1 = SETransform(a, a, 3*np.pi/2)
-p2 = SETransform(9*a, a, 0)
-p3 = SETransform(9*a, 5*a, np.pi/2)
-p4 = SETransform(a, 5*a, np.pi)
+p2 = SETransform(19*a, a, 0)
+p3 = SETransform(19*a, 11*a, np.pi/2)
+p4 = SETransform(a, 11*a, np.pi)
 
 p1 = DuckieNode(p1, tag_id=58)
 p2 = DuckieNode(p2, tag_id=96)
@@ -38,10 +38,10 @@ p2.insert_parent(p1)
 p3.insert_parent(p2)
 p4.insert_parent(p3)
 
-#p1.insert_corner(DuckieCorner(SETransform(2*a,2*a, 7*np.pi/4),1.5*a,'LEFT'))
-p2.insert_corner(SETransform(8*a,2*a, np.pi/4))
-p3.insert_corner(SETransform(8*a,4*a, 3*np.pi/4))
-p4.insert_corner(SETransform(2*a,4*a, 5*np.pi/4))
+p1.insert_corner(DuckieCorner(SETransform(4*a,4*a, 7*np.pi/4),3*a,'LEFT'))
+p2.insert_corner(DuckieCorner(SETransform(16*a,4*a, np.pi/4),3*a,'LEFT'))
+p3.insert_corner(DuckieCorner(SETransform(16*a,8*a, 3*np.pi/4),2*a,'LEFT'))
+p4.insert_corner(DuckieCorner(SETransform(4*a,8*a, 5*np.pi/4),1*a,'LEFT'))
 hardcoded_path = [p2, p3, p4, p1]
 
 
@@ -53,16 +53,17 @@ class DubinsNode:
         self.wheel_base = rospy.get_param('~wheel_base', 0.102)
         
         self.odom_sub = rospy.Subscriber('/odometry/filtered', Odometry, self.odom_callback)
-        self.tag_info_sub = rospy.Subscriber(f'/{self.bot_name}/tag_info', TagInfo, self.tag_info_callback)
+        self.tag_info_sub = rospy.Subscriber(f'/{self.bot_name}/tag_info', TagInfo, self.tag_info_callback, buff_size = 1)
         
         self.marker_pub = rospy.Publisher('/dubins_marker', Marker, queue_size=1)
         self.dubins_pub = rospy.Publisher('/dubins_path', Marker, queue_size=1)
         self.wheel_cmd_pub = rospy.Publisher(f'/{self.bot_name}/wheels_driver_node/wheels_cmd', WheelsCmdStamped, queue_size=1)
         self.se_pose = SETransform(0,0,0)
         self.tag_info = None
+        self.tag_distance = 10
         self.path = hardcoded_path
-        self.node_lookahead = 2*a
-        self.waypoint_lookahead = 2.5*a
+        self.node_lookahead = 6*a
+        self.waypoint_lookahead = 8*a
         self.next_node = None
         self.node_in_scope = False
         self.tag_present = False
@@ -72,6 +73,7 @@ class DubinsNode:
         self.pursuit_path = None
         self.running_dubs = False
         self.do_dubins = False
+        self.corner = None
         rospy.on_shutdown(self.shutdown_duckie)
     def odom_callback(self, msg):
         self.se_pose.x = msg.pose.pose.position.x
@@ -87,6 +89,7 @@ class DubinsNode:
 
     def tag_info_callback(self, msg):
         self.tag_info = msg
+        self.tag_distance = np.sqrt(self.tag_info.x**2 + self.tag_info.y**2)
 
     def get_node_lookahead(self):
         if sg.Point(self.se_pose.x, self.se_pose.y).buffer(self.node_lookahead).contains(sg.Point(self.next_node.x, self.next_node.y)):
@@ -98,25 +101,63 @@ class DubinsNode:
     def check_tag(self):
         if self.tag_info is not None:
             # rospy.loginfo(f"Tag {self.tag_info.tag_id} detected, looking for tag {self.next_node.tag_id}")
-            if self.next_node.tag_id == self.tag_info.tag_id:
-                # rospy.loginfo(f"Tag {self.tag_info.tag_id} is present, we moving on brahh")
+            if self.next_node.tag_id == self.tag_info.tag_id and self.tag_distance < 1.5*a:
+                #rospy.loginfo(f"Tag {self.tag_info.tag_id} is present, we moving on brahh")
                 self.tag_present = True
+            
             else:
                 self.tag_present = False
         else:
             self.tag_present = False
     
-    def check_collision(obstacles: List[sg.Polygon], duckie_path : List[DuckieSegment]):
+    def check_collision(self,obstacles: List[sg.Polygon], duckie_path : List[DuckieSegment]):
         collision = False
         for segment in duckie_path:
             for obstacle in obstacles:
                 if segment.shapely_path.intersects(obstacle):
+                    print(f"Collision detected with obstacle {obstacle}")
                     collision = True
                     break
         return collision
+    
+    def extend_line(self,line, distance):
+        """
+        Extend a LineString by a given distance along its last segment.
+        """
+        if line.is_empty or len(line.coords) < 2:
+            raise ValueError("LineString must have at least two points to extend.")
+        
+        # Get the last two points
+        x1, y1 = line.coords[-2]
+        x2, y2 = line.coords[-1]
+        
+        # Calculate the direction vector (dx, dy)
+        dx = x2 - x1
+        dy = y2 - y1
+        
+        # Normalize the direction vector
+        length = np.sqrt(dx**2 + dy**2)
+        dx /= length
+        dy /= length
+        
+        # Calculate the new point by extending in the direction of (dx, dy)
+        new_x = x2 + dx * distance
+        new_y = y2 + dy * distance
+        
+        # Create a new LineString with the extended point
+        new_coords = list(line.coords) + [(new_x, new_y)]
+        return sg.LineString(new_coords)
+
     def get_line(self):
         self.line = sg.LineString([(self.next_node.parent.x,self.next_node.parent.y), (self.next_node.x, self.next_node.y)])
+        self.line = self.extend_line(self.line, 0.5)
         self.line_theta = np.arctan2(self.line.coords[1][1] - self.line.coords[0][1], self.line.coords[1][0] - self.line.coords[0][0])
+    def decrease_lookahead(self,pose: SETransform, distance: float):
+        
+        new_x = pose.x + np.cos(pose.theta)*distance
+        new_y = pose.y + np.sin(pose.theta)*distance
+
+        return SETransform(new_x, new_y, pose.theta)
 
     def get_line_lookahead(self):
         circle = sg.Point(self.se_pose.x, self.se_pose.y).buffer(self.waypoint_lookahead).boundary
@@ -125,7 +166,9 @@ class DubinsNode:
         if intersection.is_empty:
             return SETransform(self.next_node.x, self.next_node.y, self.line_theta)
         elif intersection.geom_type == 'Point':
-            return SETransform(intersection.x, intersection.y, self.line_theta)
+            intersect = SETransform(intersection.x, intersection.y, self.line_theta)
+            return self.decrease_lookahead(intersect,-0.2)
+            
        
         # Convert MultiPoint to a list of Points
         elif intersection.geom_type == 'MultiPoint':
@@ -292,14 +335,16 @@ class DubinsNode:
             # If the next_node is in scope and the tag matches, move on to the next node
             if self.node_in_scope and self.tag_present:
                 rospy.loginfo(f"Moving to next node")
+                self.corner = self.next_node.corner
                 self.next_node = self.next_node.next
                 self.do_dubins = True
                 self.node_in_scope = False
                 self.tag_present = False
                 self.get_line()  # Update line for new node
+                
 
             # If we have a next_node but no line yet, compute it
-            if self.next_node and (self.line is None):
+            if self.next_node and self.line is None:
                 self.get_line()
 
             lookahead_point = self.get_line_lookahead()
@@ -307,8 +352,14 @@ class DubinsNode:
                 # rospy.loginfo(f"Lookahead Point: x={lookahead_point.x}, y={lookahead_point.y}")
                 dub = dubins(self.se_pose,lookahead_point,3,0.3,0.2,0.2)
                 self.duckie_path = dub.solve()
-
+                if self.check_collision([self.corner.shapely_obs],self.duckie_path):
+                    rospy.loginfo("Collision detected, recalculating path")
+                    dub1 =  dubins(self.se_pose,self.corner.placement,3,0.3,0.2,self.corner.radius)
+                    self.duckie_path = dub1.solve()
+                    dub2 = dubins(self.corner.placement,lookahead_point,3,0.3,self.corner.radius,0.2)
+                    self.duckie_path += dub2.solve()
                 self.publish_path_markers()
+
                 temp_path_array= np.empty((0,3))
                 for segment in self.duckie_path:
                     partial = segment.get_path_array()
@@ -330,10 +381,10 @@ class DubinsNode:
             wheels_cmd.vel_left = l_speed
             wheels_cmd.vel_right = r_speed
             self.wheel_cmd_pub.publish(wheels_cmd)
-            if self.running_dubs:
-                rospy.loginfo(f"Left speed: {l_speed}, Right speed: {r_speed} doiiing the stuuf")
-            else:
-                rospy.loginfo(f"Left speed: {l_speed}, Right speed: {r_speed} going straight")
+            # if self.running_dubs:
+            #     rospy.loginfo(f"Left speed: {l_speed}, Right speed: {r_speed} doiiing the stuuf")
+            # else:
+            #     rospy.loginfo(f"Left speed: {l_speed}, Right speed: {r_speed} going straight")
             self.check_completion()
 
             # Publish markers for visualization
