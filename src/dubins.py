@@ -313,6 +313,7 @@ class DubinsNode:
                     partial = segment.get_path_array()
                     temp_path_array = np.vstack((temp_path_array, partial))
                 self.pursuit_path = temp_path_array
+
             l_speed, r_speed =self.pure_pursuit_control(self.pursuit_path, 0.04, 0.102, 0.2)
             wheels_cmd = WheelsCmdStamped()
             wheels_cmd.header.stamp = rospy.Time.now()
@@ -321,7 +322,8 @@ class DubinsNode:
             self.wheel_cmd_pub.publish(wheels_cmd)
             if self.running_dubs:
                 rospy.loginfo(f"Left speed: {l_speed}, Right speed: {r_speed} doiiing the stuuf")
-
+            else:
+                rospy.loginfo(f"Left speed: {l_speed}, Right speed: {r_speed} going straight")
             self.check_completion()
 
             # Publish markers for visualization
