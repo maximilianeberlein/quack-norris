@@ -17,6 +17,8 @@ from tf.transformations import quaternion_from_euler, euler_from_quaternion
 from quack_norris.msg import TagInfo
 import os
 import yaml
+import message_filters
+
 
 
 class LocalMapNode:
@@ -40,8 +42,10 @@ class LocalMapNode:
         self.wheel_distance = self.drive_conroller_config['drive_params']['wheel_distance']
         
         # Subscribers
-        self.image_sub = rospy.Subscriber(f'/{self.bot_name}/camera_node/image/compressed', CompressedImage, self.image_callback)
-        self.calibration_sub = rospy.Subscriber(f'/{self.bot_name}/camera_node/camera_info', CameraInfo, self.calib_callback)
+        image_sub = message_filters.Subscriber(f'/{self.bot_name}/camera_node/image/compressed', CompressedImage)
+        calib_sub = message_filters.Subscriber(f'/{self.bot_name}/camera_node/camera_info', CameraInfo)
+        ts = message_filters.ApproximateTimeSynchronizer([image_sub, calib_sub], queue_size=10, slop=0.1, )
+        ts.registerCallback(self.image_callback)
         self.tag_sub = rospy.Subscriber('/tag_detections', AprilTagDetectionArray, self.tag_callback)
 
         # Publishers
@@ -72,21 +76,21 @@ class LocalMapNode:
             self.map1, self.map2 = cv2.initUndistortRectifyMap(self.camera_matrix, self.dist_coeffs, None, self.new_camera_matrix, (msg.width, msg.height), 5)
             rospy.loginfo("Camera calibration parameters received.")
 
-    def image_callback(self, msg):
+    def image_callback(self, image_msg, calib_msg):
         
         if self.map1 is None or self.map2 is None:
-            rospy.logwarn("Camera calibration parameters not yet received.")
-            return
+            self.calib_callback(calib_msg)
         
         # Convert the image from ROS format to OpenCV format
-        image = self.bridge.compressed_imgmsg_to_cv2(msg, desired_encoding="mono8")
+        image = self.bridge.compressed_imgmsg_to_cv2(image_msg, desired_encoding="mono8")
         
         # Rectify the image
         rectified_image = cv2.remap(image, self.map1, self.map2, cv2.INTER_LINEAR)
         
         # Convert the rectified image back to ROS format
         rect_img = self.bridge.cv2_to_imgmsg(rectified_image, encoding="mono8")
-        rect_img.header = msg.header
+        rect_img.header = image_msg.header
+    
         self.rect_pub.publish(rect_img)
 
     def tag_callback(self, msg):
