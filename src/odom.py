@@ -3,13 +3,14 @@
 import rospy
 import numpy as np
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Quaternion, TransformStamped
-from tf.transformations import quaternion_from_euler
+from geometry_msgs.msg import Quaternion, TransformStamped, PoseWithCovarianceStamped
+from tf.transformations import quaternion_from_euler, euler_from_quaternion
 from duckietown_msgs.msg import WheelEncoderStamped
 from std_msgs.msg import Float32
 import tf
 import os
 import numpy as np
+from robot_localization.srv import SetPose
 
 class OdometryNode:
     def __init__(self):
@@ -38,6 +39,8 @@ class OdometryNode:
         self.odom_pub = rospy.Publisher('/wheel_encoder/odom', Odometry, queue_size=10)
         self.left_ticks_sub = rospy.Subscriber(f'/{self.bot_name}/left_wheel_encoder_node/tick',WheelEncoderStamped, self.left_ticks_callback)
         self.right_ticks_sub = rospy.Subscriber(f'/{self.bot_name}/right_wheel_encoder_node/tick',WheelEncoderStamped, self.right_ticks_callback)
+        self.get_global_pose = rospy.Subscriber(f'/duckiebot_globalpose', PoseWithCovarianceStamped, self.global_pose_callback)
+
         # self.r_error = rospy.Publisher(f'/{self.bot_name}/right_speed', Float32, queue_size=1)
         # self.l_error = rospy.Publisher(f'/{self.bot_name}/left_speed',Float32, queue_size=1)
         self.tf_broadcaster = tf.TransformBroadcaster()
@@ -47,6 +50,21 @@ class OdometryNode:
 
     def right_ticks_callback(self, msg):
         self.curr_right_ticks = msg.data
+
+    def global_pose_callback(self, msg):
+        self.x = msg.pose.pose.position.x
+        self.y = msg.pose.pose.position.y
+        
+        q = msg.pose.pose.orientation
+        quaternion = [q.x, q.y, q.z, q.w]
+
+        # Convert quaternion to Euler angles
+        roll, pitch, yaw = euler_from_quaternion(quaternion)
+        self.theta = yaw
+
+        rospy.loginfo(f'Global pose received {self.x} {self.y} {self.theta}')
+                
+
 
     def compute_odometry(self):
         # Get current time

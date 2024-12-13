@@ -3,11 +3,13 @@
 import rospy
 import yaml
 from visualization_msgs.msg import Marker, MarkerArray
-from geometry_msgs.msg import Point, Quaternion, Vector3
+from geometry_msgs.msg import Point, Quaternion, Vector3, PoseWithCovarianceStamped, Pose
 from apriltag_ros.msg import AprilTagDetectionArray
 from pyquaternion import Quaternion as PyQuaternion
 import numpy as np
 from nav_msgs.msg import Odometry
+from tf.transformations import euler_from_quaternion
+
 
 class VizNode:
     def __init__(self):
@@ -15,6 +17,7 @@ class VizNode:
         
         self.marker_pub = rospy.Publisher('global_map_viz', MarkerArray, queue_size=10)
         self.duckiebot_pub = rospy.Publisher('duckiebot_viz', Marker, queue_size=10)
+        self.globalpose_pub = rospy.Publisher('duckiebot_globalpose', PoseWithCovarianceStamped, queue_size=10)
 
         self.tag_sub = rospy.Subscriber('/tag_detections', AprilTagDetectionArray, self.self_localization_callback)    
         self.odom_sub = rospy.Subscriber(f'/odometry/filtered', Odometry, self.odom_callback)
@@ -37,6 +40,8 @@ class VizNode:
             return
                 
         self.waypoints = self.load_waypoints(self.yaml_file)
+        self.rotation_quat = PyQuaternion(axis=[0, 0, 1], angle=np.pi)
+        print(self.rotation_quat)
 
         self.marker_array = MarkerArray()
         self.create_markers()
@@ -52,7 +57,11 @@ class VizNode:
         self.duckiebot_marker.mesh_use_embedded_materials = True
         z_offset_mesh = 0.0335  # offset such that the wheels are on the ground
         self.duckiebot_marker.pose.position = Point(0, 0, z_offset_mesh)
-        self.duckiebot_marker.pose.orientation = Quaternion(0, 0, 0, 1)
+        # self.duckiebot_marker.pose.orientation = self.rotation_quat
+        self.duckiebot_marker.pose.orientation.x = self.rotation_quat.x
+        self.duckiebot_marker.pose.orientation.y = self.rotation_quat.y
+        self.duckiebot_marker.pose.orientation.z = self.rotation_quat.z
+        self.duckiebot_marker.pose.orientation.w = self.rotation_quat.w
         self.duckiebot_marker.scale = Vector3(1, 1, 1)
         
         self.use_apriltag = False
@@ -95,13 +104,13 @@ class VizNode:
         map_marker.pose.position.x = plane_width / 2.0
         map_marker.pose.position.y = plane_width / 2.0
         map_marker.pose.position.z = 0.0
-        rotation_quat = PyQuaternion(axis=[0, 0, 1], angle=np.pi)
+        
 
         # Apply the quaternion to the map_marker orientation
-        map_marker.pose.orientation.x = rotation_quat.x
-        map_marker.pose.orientation.y = rotation_quat.y
-        map_marker.pose.orientation.z = rotation_quat.z
-        map_marker.pose.orientation.w = rotation_quat.w
+        map_marker.pose.orientation.x = self.rotation_quat.x
+        map_marker.pose.orientation.y = self.rotation_quat.y
+        map_marker.pose.orientation.z = self.rotation_quat.z
+        map_marker.pose.orientation.w = self.rotation_quat.w
 
         # map_marker.pose.orientation.x = 0.0
         # map_marker.pose.orientation.y = 0.0
@@ -267,9 +276,9 @@ class VizNode:
 
         if closest_detection:
 
-            if min_distance < 0.585:
+            if min_distance < 0.7:
                 angle = np.arctan2(closest_detection.pose.pose.pose.position.z, closest_detection.pose.pose.pose.position.x)
-                if np.radians(55) < angle < np.radians(125):
+                if np.radians(45) < angle < np.radians(135):
 
                     self.use_apriltag = True
                     # get id of apriltag and compare it with global waypoint ids
@@ -286,28 +295,64 @@ class VizNode:
 
                         camera_to_apriltag_transform = PyQuaternion(closest_detection.pose.pose.pose.orientation.w, closest_detection.pose.pose.pose.orientation.x, closest_detection.pose.pose.pose.orientation.y, closest_detection.pose.pose.pose.orientation.z)
 
+
+                        qx = closest_detection.pose.pose.pose.orientation.x
+                        qy = closest_detection.pose.pose.pose.orientation.y
+                        qz = closest_detection.pose.pose.pose.orientation.z
+                        qw = closest_detection.pose.pose.pose.orientation.w
+
+                        # Convert quaternion to Euler angles
+                        roll, yaw, pitch = euler_from_quaternion([camera_to_apriltag_transform.x, camera_to_apriltag_transform.y, camera_to_apriltag_transform.z, camera_to_apriltag_transform.w])
+                        # Convert quaternion to Euler angles
+                        rotation_matrix = np.array([
+                            [np.cos(-yaw), -np.sin(-yaw)],
+                            [np.sin(-yaw), np.cos(-yaw)]
+                        ])
+
+                        
                         # transform apriltag position with respect to real duckie to sim-duckie pos with respect to waypoint
                         relative_duckie_pos_sim = Point(
-                            closest_detection.pose.pose.pose.position.z,
-                            closest_detection.pose.pose.pose.position.x,
+                            -closest_detection.pose.pose.pose.position.z,
+                            -closest_detection.pose.pose.pose.position.x,
                             0.0335
                         )
 
+                        duckie_position = np.array([relative_duckie_pos_sim.x, relative_duckie_pos_sim.y])
+                        tag_position = np.dot(rotation_matrix, duckie_position)
+
+
+                        relative_duckie_pos_sim_transformed = Point(
+                            tag_position[0],
+                            tag_position[1],
+                            0.0335
+                        )
+
+                        # rospy.loginfo(f"Relative duckie pos sim: {relative_duckie_pos_sim_transformed}")
+
+
+                       
+
+                        # relative_duckie_pos_sim_transformed = camera_to_apriltag_transform.inverse.rotate([relative_duckie_pos_sim.x, relative_duckie_pos_sim.y, relative_duckie_pos_sim.z])
+
+
                         # get z axis rotation between waypoint and global coordinate system
                         waypoint_orientation = PyQuaternion(matching_waypoint['orientation'][3], matching_waypoint['orientation'][0], matching_waypoint['orientation'][1], matching_waypoint['orientation'][2])
-                        global_map_orientation = PyQuaternion(1, 0, 0, 0)
+                        global_map_orientation = self.rotation_quat
                         yaw = (waypoint_orientation * global_map_orientation.inverse).yaw_pitch_roll[2]
                         yaw_quat = PyQuaternion(axis=[0, 0, 1], angle=yaw)
 
-                        rotate = -yaw + np.pi
+                        rotate = yaw + np.pi
 
-                        # rotate relative pos of sim-duckie to waypoint by its yaw in reference to the global coords.
-                        rotated_rel_duckie_pos_sim_x = relative_duckie_pos_sim.x * np.cos(rotate) - relative_duckie_pos_sim.y * np.sin(rotate)
-                        rotated_rel_duckie_pos_sim_y = relative_duckie_pos_sim.x * np.sin(rotate) + relative_duckie_pos_sim.y * np.cos(rotate)
+                        # rotated_rel_duckie_pos_sim_x = relative_duckie_pos_sim_transformed[0] * np.cos(-yaw) - relative_duckie_pos_sim_transformed[1] * np.sin(-yaw)
+                        # rotated_rel_duckie_pos_sim_y = relative_duckie_pos_sim_transformed[0] * np.sin(-yaw) + relative_duckie_pos_sim_transformed[1] * np.cos(-yaw)
+
+                        # # rotate relative pos of sim-duckie to waypoint by its yaw in reference to the global coords.
+                        rotated_rel_duckie_pos_sim_x = relative_duckie_pos_sim_transformed.x * np.cos(rotate) - relative_duckie_pos_sim_transformed.y * np.sin(rotate)
+                        rotated_rel_duckie_pos_sim_y = relative_duckie_pos_sim_transformed.x * np.sin(rotate) + relative_duckie_pos_sim_transformed.y * np.cos(rotate)
 
                         # set global position of sim-duckie
                         self.duckiebot_marker.pose.position = Point(
-                            matching_waypoint['position'][0] + rotated_rel_duckie_pos_sim_x,
+                            matching_waypoint['position'][0] - rotated_rel_duckie_pos_sim_x,
                             matching_waypoint['position'][1] + rotated_rel_duckie_pos_sim_y,
                             0.0335
                         )
@@ -318,6 +363,27 @@ class VizNode:
                         # set global orientation of sim-duckie
                         self.duckiebot_marker.pose.orientation = Quaternion(-orientation[1], -orientation[2], -orientation[3], orientation[0])
                         self.initial_pose_set = False  # Reset initial pose flag
+
+
+                        pose_msg = PoseWithCovarianceStamped()
+                        pose_msg.header.stamp = rospy.Time.now()
+                        pose_msg.header.frame_id = "map"
+
+                        # current_orientation = PyQuaternion(
+                        #     self.duckiebot_marker.pose.orientation.w,
+                        #     self.duckiebot_marker.pose.orientation.x,
+                        #     self.duckiebot_marker.pose.orientation.y,
+                        #     self.duckiebot_marker.pose.orientation.z
+                        # )
+
+                        pose_msg.pose.pose = Pose(
+                            position=self.duckiebot_marker.pose.position,
+                            orientation= self.duckiebot_marker.pose.orientation
+                        )
+                        # Set covariance to zero for simplicity, you can adjust this as needed
+                        pose_msg.pose.covariance = [1e-9 if i % 7 == 0 else 0 for i in range(36)]
+                        
+                        self.globalpose_pub.publish(pose_msg)
                         return
         rospy.loginfo("Using odometry for localization")             
         self.use_apriltag = False
@@ -329,6 +395,8 @@ class VizNode:
             
             self.marker_pub.publish(self.marker_array)
             self.duckiebot_pub.publish(self.duckiebot_marker)
+
+
             rate.sleep()
 
 if __name__ == "__main__":
