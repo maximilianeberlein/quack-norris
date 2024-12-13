@@ -10,16 +10,17 @@ from std_msgs.msg import Float32, ColorRGBA
 from quack_norris.msg import TagInfo
 import shapely.geometry as sg
 import tf
+from typing import List
 import os
 import numpy as np
 
-from quack_norris_utils.utils import dubins, SETransform, DuckieObstacle, DuckieNode, DuckieSegment
+from quack_norris_utils.utils import dubins, SETransform, DuckieObstacle, DuckieNode, DuckieSegment, DuckieCorner
 from visualization_msgs.msg import Marker
 
 a = 0.585/2
 p1 = SETransform(a, a, 3*np.pi/2)
-p2 = SETransform(5*a, a, 0)
-p3 = SETransform(5*a, 5*a, np.pi/2)
+p2 = SETransform(9*a, a, 0)
+p3 = SETransform(9*a, 5*a, np.pi/2)
 p4 = SETransform(a, 5*a, np.pi)
 
 p1 = DuckieNode(p1, tag_id=58)
@@ -37,9 +38,9 @@ p2.insert_parent(p1)
 p3.insert_parent(p2)
 p4.insert_parent(p3)
 
-p1.insert_corner(SETransform(2*a,2*a, 7*np.pi/4))
-p2.insert_corner(SETransform(4*a,2*a, np.pi/4))
-p3.insert_corner(SETransform(4*a,4*a, 3*np.pi/4))
+#p1.insert_corner(DuckieCorner(SETransform(2*a,2*a, 7*np.pi/4),1.5*a,'LEFT'))
+p2.insert_corner(SETransform(8*a,2*a, np.pi/4))
+p3.insert_corner(SETransform(8*a,4*a, 3*np.pi/4))
 p4.insert_corner(SETransform(2*a,4*a, 5*np.pi/4))
 hardcoded_path = [p2, p3, p4, p1]
 
@@ -104,7 +105,15 @@ class DubinsNode:
                 self.tag_present = False
         else:
             self.tag_present = False
-
+    
+    def check_collision(obstacles: List[sg.Polygon], duckie_path : List[DuckieSegment]):
+        collision = False
+        for segment in duckie_path:
+            for obstacle in obstacles:
+                if segment.shapely_path.intersects(obstacle):
+                    collision = True
+                    break
+        return collision
     def get_line(self):
         self.line = sg.LineString([(self.next_node.parent.x,self.next_node.parent.y), (self.next_node.x, self.next_node.y)])
         self.line_theta = np.arctan2(self.line.coords[1][1] - self.line.coords[0][1], self.line.coords[1][0] - self.line.coords[0][0])
@@ -298,6 +307,7 @@ class DubinsNode:
                 # rospy.loginfo(f"Lookahead Point: x={lookahead_point.x}, y={lookahead_point.y}")
                 dub = dubins(self.se_pose,lookahead_point,3,0.3,0.2,0.2)
                 self.duckie_path = dub.solve()
+
                 self.publish_path_markers()
                 temp_path_array= np.empty((0,3))
                 for segment in self.duckie_path:
@@ -314,7 +324,7 @@ class DubinsNode:
                     temp_path_array = np.vstack((temp_path_array, partial))
                 self.pursuit_path = temp_path_array
 
-            l_speed, r_speed =self.pure_pursuit_control(self.pursuit_path, 0.04, 0.102, 0.2)
+            l_speed, r_speed =self.pure_pursuit_control(self.pursuit_path, 0.04, 0.102, 0.1)
             wheels_cmd = WheelsCmdStamped()
             wheels_cmd.header.stamp = rospy.Time.now()
             wheels_cmd.vel_left = l_speed
