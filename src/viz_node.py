@@ -276,7 +276,7 @@ class VizNode:
 
         if closest_detection:
 
-            if min_distance < 0.7:
+            if min_distance < 0.6:
                 angle = np.arctan2(closest_detection.pose.pose.pose.position.z, closest_detection.pose.pose.pose.position.x)
                 if np.radians(45) < angle < np.radians(135):
 
@@ -393,8 +393,8 @@ class VizNode:
 
         while not rospy.is_shutdown():
             
-            # self.marker_pub.publish(self.marker_array)
-            # self.duckiebot_pub.publish(self.duckiebot_marker)
+            self.marker_pub.publish(self.marker_array)
+            self.duckiebot_pub.publish(self.duckiebot_marker)
 
 
             rate.sleep()
