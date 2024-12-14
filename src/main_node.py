@@ -42,7 +42,8 @@ class MainNode:
 
         # Publishers
         self.pub_wheels = rospy.Publisher(f'/{self.bot_name}/wheels_driver_node/wheels_cmd', WheelsCmdStamped, queue_size=10)
-        self.rect_pub = rospy.Publisher(f'/{self.bot_name}/camera_node/rect', Image, queue_size=1)
+        self.rect_pub = rospy.Publisher(f'/{self.bot_name}/camera_node/rect/image_rect', Image, queue_size=1)
+        self.rect_info_pub = rospy.Publisher(f'/{self.bot_name}/camera_node/rect/camera_info', CameraInfo, queue_size=1)
         self.tag_ids_pub = rospy.Publisher(f'/{self.bot_name}/detected_tags', Int32MultiArray, queue_size=10)
 
         # Define the wheel command message
@@ -60,22 +61,32 @@ class MainNode:
             self.map1, self.map2 = cv2.initUndistortRectifyMap(self.camera_matrix, self.dist_coeffs, None, self.new_camera_matrix, (msg.width, msg.height), 5)
             rospy.loginfo("Camera calibration parameters received.")
 
-    def image_callback(self, image_msg, calib_msg):
+    def image_callback(self, image_msg, camera_info_msg):
         
         if self.map1 is None or self.map2 is None:
-            self.calib_callback(calib_msg)
+            self.calib_callback(camera_info_msg)
         
         # Convert the image from ROS format to OpenCV format
         image = self.bridge.compressed_imgmsg_to_cv2(image_msg, desired_encoding="mono8")
         
-        # Rectify the image
         rectified_image = cv2.remap(image, self.map1, self.map2, cv2.INTER_LINEAR)
+
+        # Convert the rectified image to a compressed image
+        rectified_image_msg = self.bridge.cv2_to_imgmsg(rectified_image, encoding="mono8")
+
+        # Publish the compressed rectified image
+        rectified_image_msg.header = image_msg.header
+        self.rect_pub.publish(rectified_image_msg)
+        self.rect_info_pub.publish(camera_info_msg)
+
+        # Rectify the image
+        # rectified_image = cv2.remap(image, self.map1, self.map2, cv2.INTER_LINEAR)
         
-        # Convert the rectified image back to ROS format
-        rect_img = self.bridge.cv2_to_imgmsg(rectified_image, encoding="mono8")
-        rect_img.header = image_msg.header
+        # # Convert the rectified image back to ROS format
+        # rect_img = self.bridge.cv2_to_imgmsg(rectified_image, encoding="mono8")
+        # rect_img.header = image_msg.header
     
-        self.rect_pub.publish(rect_img)
+        # self.rect_pub.publish(rect_img)
 
     def tag_callback(self, msg):
         try:
