@@ -3,6 +3,6 @@
 
     <node name="odom_node" pkg="quack_norris" type="odom.py" output="screen"/>
     <node name='calibration' pkg='quack_norris' type='calibration.py' output='screen'/>
-   
+    <node name='wheel_speed_controller' pkg='quack_norris' type='wheel_speed_controller.py' output='screen'/>
     <node pkg="tf" type="static_transform_publisher" name="map_to_odom" args="0 0 0 0 0 0 map odom 100" />
 </launch>

@@ -39,14 +39,15 @@ class OdometryNode:
         self.imu_yaw_vel_array = []
         self.imu_yaw_vel = 0.0
         # Publishers and Subscribers
-        self.odom_pub = rospy.Publisher('/wheel_encoder/odom', Odometry, queue_size=10)
+        self.odom_pub = rospy.Publisher('/wheel_encoder/odom', Odometry, queue_size=1)
         self.imu_sub = rospy.Subscriber(f'/{self.bot_name}/imu_node/data', Imu, self.imu_callback)
         self.left_ticks_sub = rospy.Subscriber(f'/{self.bot_name}/left_wheel_encoder_node/tick',WheelEncoderStamped, self.left_ticks_callback)
         self.right_ticks_sub = rospy.Subscriber(f'/{self.bot_name}/right_wheel_encoder_node/tick',WheelEncoderStamped, self.right_ticks_callback)
         self.get_global_pose = rospy.Subscriber(f'/duckiebot_globalpose', PoseWithCovarianceStamped, self.global_pose_callback)
 
-        # self.r_error = rospy.Publisher(f'/{self.bot_name}/right_speed', Float32, queue_size=1)
-        # self.l_error = rospy.Publisher(f'/{self.bot_name}/left_speed',Float32, queue_size=1)
+        self.r_error = rospy.Publisher(f'/{self.bot_name}/right_speed', Float32, queue_size=1)
+        self.l_error = rospy.Publisher(f'/{self.bot_name}/left_speed',Float32, queue_size=1)
+        self.angular_speed = rospy.Publisher(f'/{self.bot_name}/angular_speed',Float32, queue_size=1)
         self.tf_broadcaster = tf.TransformBroadcaster()
     def imu_callback(self, msg):
         rot_vel = msg.angular_velocity
@@ -90,8 +91,9 @@ class OdometryNode:
         right_distance = (2 * np.pi * self.wheel_radius * right_ticks) / self.ticks_per_revolution_right
         l_speed = Float32(left_distance/dt)
         r_speed = Float32(right_distance/dt)
-        # self.l_error.publish(l_speed)
-        # self.r_error.publish(r_speed)
+        self.l_error.publish(l_speed)
+        self.r_error.publish(r_speed)
+        self.angular_speed.publish(Float32(self.imu_yaw_vel))
         # Compute linear and angular velocity
         linear_velocity = (left_distance + right_distance) / (2.0 * dt)
         angular_velocity = self.imu_yaw_vel
@@ -128,7 +130,7 @@ class OdometryNode:
         )
 
     def spin(self):
-        rate = rospy.Rate(10)  # 10 Hz
+        rate = rospy.Rate(20)  # 10 Hz
         rospy.wait_for_message(f'/{self.bot_name}/left_wheel_encoder_node/tick', WheelEncoderStamped)
         rospy.wait_for_message(f'/{self.bot_name}/right_wheel_encoder_node/tick', WheelEncoderStamped)
         self.last_time = rospy.Time.now()

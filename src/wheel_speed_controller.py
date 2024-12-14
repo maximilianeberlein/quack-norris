@@ -21,8 +21,12 @@ class WheelSpeedControllerNode:
         self.left_ticks_sub = rospy.Subscriber(f'/{self.bot_name}/left_wheel_encoder_node/tick', WheelEncoderStamped, self.left_ticks_callback)
         self.right_ticks_sub = rospy.Subscriber(f'/{self.bot_name}/right_wheel_encoder_node/tick', WheelEncoderStamped, self.right_ticks_callback)
         
+        self.angular_speed_sub = rospy.Subscriber(f'/{self.bot_name}/angular_speed', Float32, self.angular_speed_cb)
+        self.desired_angular_speed_sub = rospy.Subscriber(f'/{self.bot_name}/desired_angular_speed', Float32, self.desired_angular_speed_cb)
+
         self.wheel_radius = rospy.get_param('~wheel_radius', 0.0335)  # meters
-        self.ticks_per_revolution = rospy.get_param('~ticks_per_revolution', 135)
+        self.l_ticks_per_revolution = rospy.get_param('~ticks_per_revolution', 135)
+        self.r_ticks_per_revolution = rospy.get_param('~ticks_per_revolution', 135)
         self.wheel_base = rospy.get_param('~wheel_base', 0.102)
 
 
@@ -35,30 +39,50 @@ class WheelSpeedControllerNode:
         self.l_speed = 0
         self.r_speed = 0
         self.integral = 0
+        self.l_last_time = rospy.Time.now()
+        self.r_last_time = rospy.Time.now()
+
+        self.desired_angular_speed = 0  
+        self.angular_speed = 0
+        self.v_max = 0.8
+
+        rospy.on_shutdown(self.shutdown_duckie)
+    def shutdown_duckie(self):
+        rospy.loginfo("Shutting down... stopping the robot.")
+        self.wheel_cmd_pub.publish(WheelsCmdStamped())
+        rospy.sleep(1)
+
 
     def left_ticks_callback(self, msg):
         self.curr_left_ticks = msg.data
         current_time = rospy.Time.now()
         dt = (current_time - self.l_last_time).to_sec()
+        dt= np.clip(dt, 0.01, 0.2)
         self.l_last_time = current_time
         left_ticks = self.curr_left_ticks - self.previous_left_ticks
         self.previous_left_ticks = self.curr_left_ticks
-        self.l_speed= (2*np.pi*self.wheel_radius*left_ticks)/(self.ticks_per_revolution*dt)
+        self.l_speed= (2*np.pi*self.wheel_radius*left_ticks)/(self.l_ticks_per_revolution*dt)
     def right_ticks_callback(self, msg):
         self.curr_right_ticks = msg.data
         current_time = rospy.Time.now()
         dt = (current_time - self.r_last_time).to_sec()
+        dt= np.clip(dt, 0.01, 0.2)
         self.r_last_time = current_time
         right_ticks = self.curr_right_ticks - self.previous_right_ticks
         self.previous_right_ticks = self.curr_right_ticks
-        self.r_speed= (2*np.pi*self.wheel_radius*right_ticks)/(self.ticks_per_revolution*dt)
+        self.r_speed= (2*np.pi*self.wheel_radius*right_ticks)/(self.r_ticks_per_revolution*dt)
 
+
+    def angular_speed_cb(self, msg):
+        self.angular_speed = msg.data
+    def desired_angular_speed_cb(self, msg):
+        self.desired_angular_speed = msg.data
     def desired_wheel_speed_cb(self, msg):
         # Implement your wheel speed controller here
         # You can access the desired wheel speeds from msg.vel_left and msg.vel_right
         # You can publish the wheel commands using self.wheel_cmd_pub.publish(wheel_msg)
-        desired_l_speed = msg.vel_left
-        desired_r_speed = msg.vel_right
+        desired_l_speed = msg.vel_left *self.v_max
+        desired_r_speed = msg.vel_right *self.v_max
         l_error = Float32(data=desired_l_speed - self.l_speed)
         r_error = Float32(data=desired_r_speed - self.r_speed)
         self.l_error.publish(l_error)
@@ -67,14 +91,19 @@ class WheelSpeedControllerNode:
             u_l = 0
             u_r = 0
         else:
-            u_l = self.pid_correction(desired_l_speed, self.l_speed)
-            u_r = self.pid_correction(desired_r_speed, self.r_speed)
+            u_l = self.pid_correction_speed(desired_l_speed, self.l_speed)
+            u_r = self.pid_correction_speed(desired_r_speed, self.r_speed)
+            t_l = self.pid_correction_angular(self.desired_angular_speed, self.angular_speed)
+            t_r = self.pid_correction_angular(self.desired_angular_speed, self.angular_speed)
+            u_l -= t_l
+            u_r += t_r
         wheel_msg = WheelsCmdStamped()
-        wheel_msg.vel_left = msg.vel_left + u_l
-        wheel_msg.vel_right = msg.vel_right + u_r
+        wheel_msg.vel_left = (desired_l_speed + u_l)/0.8
+        wheel_msg.vel_right = (desired_r_speed + u_r)/0.8
+        rospy.loginfo(f'Left speed we give: {wheel_msg.vel_left}, Right speed: {wheel_msg.vel_right}')
         self.wheel_cmd_pub.publish(wheel_msg)
-    def pid_correction(self, desired_speed, current_speed):
-        kp = 2.0
+    def pid_correction_speed(self, desired_speed, current_speed):
+        kp = 0.4
         ki = 0.1
         kd = 0.01
 
@@ -90,7 +119,24 @@ class WheelSpeedControllerNode:
         self.previous_error = error
 
         return kp * error + ki * self.integral + kd * derivative
-    
+    def pid_correction_angular(self, desired_theta_dot, current_theta_dot):
+        kp = 0.1
+        ki = 0.01
+        kd = 0.01
+
+        if not hasattr(self, 'integral'):
+            self.integral = 0
+        if not hasattr(self, 'previous_error'):
+            self.previous_error = 0
+
+        error = desired_theta_dot - current_theta_dot
+        self.integral += error
+        self.integral = np.clip(self.integral, -0.3, 0.3)
+        derivative = error - self.previous_error
+
+        self.previous_error = error
+
+        return kp * error + ki * self.integral + kd * derivative
     def run(self):
         rate = rospy.Rate(20)
         while not rospy.is_shutdown():

@@ -7,7 +7,8 @@
     <node pkg="quack_norris" type="globalpose_getter.py" name="globalpose_getter" output="screen">
         <param name="yaml_file" value="$(arg yaml_file)" />
     </node>
-
+    
+    <node name='wheel_speed_controller' pkg='quack_norris' type='wheel_speed_controller.py' output='screen'/>
     <node name="odom_node" pkg="quack_norris" type="odom.py" output="screen"/>
     <node pkg="robot_localization" type="ekf_localization_node" name="ekf_localization" output="screen">
         <rosparam command="load" file="$(find quack_norris)/config/ekf_config.yaml"/>

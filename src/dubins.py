@@ -57,7 +57,8 @@ class DubinsNode:
         
         self.marker_pub = rospy.Publisher('/dubins_marker', Marker, queue_size=1)
         self.dubins_pub = rospy.Publisher('/dubins_path', Marker, queue_size=1)
-        self.wheel_cmd_pub = rospy.Publisher(f'/{self.bot_name}/wheels_driver_node/wheels_cmd', WheelsCmdStamped, queue_size=1)
+        self.desired_wheel_cmd_pub = rospy.Publisher(f'/{self.bot_name}/desired_wheel_speed', WheelsCmdStamped, queue_size=1)
+        self.desired_angular_speed = rospy.Publisher(f'/{self.bot_name}/desired_angular_speed', Float32, queue_size=1)
         self.se_pose = SETransform(0,0,0)
         self.tag_info = None
         self.tag_distance = 10
@@ -72,6 +73,8 @@ class DubinsNode:
         self.duckie_path = None
         self.pursuit_path = None
         self.running_dubs = False
+        self.speed = 0.1
+        self.v_max = 0.8
         self.do_dubins = False
         self.need_to_fix_angle = False
         self.corner = None
@@ -319,13 +322,14 @@ class DubinsNode:
         steering_angle = np.arctan2(2 * wheelbase * np.sin(alpha), lookahead_distance)
         rospy.loginfo(f"Steering angle: {steering_angle},angle delta {angle_delta} ,also angle gain {angle_gain}")
         
-
-
+        desired_angular_speed = lookahead_point[3] 
+        self.desired_angular_speed.publish(Float32(desired_angular_speed))
+        rospy.loginfo(f"Desired angular speed: {desired_angular_speed}")
         # Calculate the left and right wheel speeds
 
         
         
-        l_speed = (speed - (steering_angle * wheelbase/2))
+        l_speed = (speed - (steering_angle * wheelbase/2)) 
         r_speed = (speed + (steering_angle * wheelbase/2))
 
         return l_speed, r_speed
@@ -341,13 +345,13 @@ class DubinsNode:
             wheels_cmd.header.stamp = rospy.Time.now()
             wheels_cmd.vel_left = l_speed
             wheels_cmd.vel_right = r_speed
-            self.wheel_cmd_pub.publish(wheels_cmd)
+            self.desired_wheel_cmd_pub.publish(wheels_cmd)
             rospy.sleep(time)
             wheels_cmd = WheelsCmdStamped()
             wheels_cmd.header.stamp = rospy.Time.now()
             wheels_cmd.vel_left = 0
             wheels_cmd.vel_right = 0
-            self.wheel_cmd_pub.publish(wheels_cmd)
+            self.desired_wheel_cmd_pub.publish(wheels_cmd)
         else: 
             self.need_to_fix_angle = False
 
@@ -360,14 +364,14 @@ class DubinsNode:
             wheels_cmd.header.stamp = rospy.Time.now()
             wheels_cmd.vel_left = 0
             wheels_cmd.vel_right = 0
-            self.wheel_cmd_pub.publish(wheels_cmd)
+            self.desired_wheel_cmd_pub.publish(wheels_cmd)
 
             
             self.running_dubs = False
             self.need_to_fix_angle = True
     def shutdown_duckie(self):
         rospy.loginfo("Shutting down... stopping the robot.")
-        self.wheel_cmd_pub.publish(WheelsCmdStamped())
+        self.desired_wheel_cmd_pub.publish(WheelsCmdStamped())
         rospy.sleep(1)  # A   
     def run(self):
         rate = rospy.Rate(10)
@@ -402,7 +406,7 @@ class DubinsNode:
                 wheels_cmd.header.stamp = rospy.Time.now()
                 wheels_cmd.vel_left = 0
                 wheels_cmd.vel_right =0
-                self.wheel_cmd_pub.publish(wheels_cmd)
+                self.desired_wheel_cmd_pub.publish(wheels_cmd)
                 rospy.sleep(1)
 
                 # rospy.loginfo(f"Lookahead Point: x={lookahead_point.x}, y={lookahead_point.y}")
@@ -410,15 +414,15 @@ class DubinsNode:
                 self.duckie_path = dub.solve()
                 if self.check_collision([self.corner.shapely_obs],self.duckie_path):
                     rospy.loginfo("Collision detected, recalculating path")
-                    dub1 =  dubins(self.se_pose,self.corner.placement,3,0.3,0.2,self.corner.radius)
+                    dub1 =  dubins(self.se_pose,self.corner.placement,3,self.speed,0.2,self.corner.radius)
                     path1 = dub1.solve()
-                    dub2 = dubins(self.corner.placement,lookahead_point,3,0.3,self.corner.radius,0.2)
+                    dub2 = dubins(self.corner.placement,lookahead_point,3,self.speed,self.corner.radius,0.2)
                     path2= dub2.solve()
                     self.duckie_path = np.concatenate((path1,path2)) 
                     print(self.duckie_path)
                 self.publish_path_markers()
 
-                temp_path_array= np.empty((0,3))
+                temp_path_array= np.empty((0,4))
                 for segment in self.duckie_path:
                     partial = segment.get_path_array()
                     temp_path_array = np.vstack((temp_path_array, partial))
@@ -426,20 +430,22 @@ class DubinsNode:
                 self.running_dubs = True
                 self.do_dubins = False
             elif not self.do_dubins and not self.running_dubs:
-                self.duckie_path =  [DuckieSegment(self.se_pose, lookahead_point, 0, 'STRAIGHT',sg.LineString([(self.se_pose.x,self.se_pose.y), (lookahead_point.x, lookahead_point.y)]),cost = 1)]
+                self.duckie_path =  [DuckieSegment(self.se_pose, lookahead_point, 0, 'STRAIGHT',sg.LineString([(self.se_pose.x,self.se_pose.y), (lookahead_point.x, lookahead_point.y)]),cost = 1,speed = self.speed)]
                 self.publish_path_markers()
-                temp_path_array= np.empty((0,3))
+                temp_path_array= np.empty((0,4))
                 for segment in self.duckie_path:
                     partial = segment.get_path_array()
                     temp_path_array = np.vstack((temp_path_array, partial))
                 self.pursuit_path = temp_path_array
 
-            l_speed, r_speed =self.pure_pursuit_control(self.pursuit_path, 0.04, 0.102, 0.5)
+            l_speed, r_speed =self.pure_pursuit_control(self.pursuit_path, 0.04, 0.102, self.speed)
+
             wheels_cmd = WheelsCmdStamped()
             wheels_cmd.header.stamp = rospy.Time.now()
-            wheels_cmd.vel_left = l_speed
-            wheels_cmd.vel_right = r_speed
-            self.wheel_cmd_pub.publish(wheels_cmd)
+            wheels_cmd.vel_left = l_speed / self.v_max
+            wheels_cmd.vel_right = r_speed / self.v_max
+            rospy.loginfo(f"Left speed: {l_speed}, Right speed: {r_speed}")
+            self.desired_wheel_cmd_pub.publish(wheels_cmd)
             # if self.running_dubs:
             #     rospy.loginfo(f"Left speed: {l_speed}, Right speed: {r_speed} doiiing the stuuf")
             # else:
