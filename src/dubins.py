@@ -73,6 +73,7 @@ class DubinsNode:
         self.pursuit_path = None
         self.running_dubs = False
         self.do_dubins = False
+        self.angle_corrected = False
         self.corner = None
         rospy.on_shutdown(self.shutdown_duckie)
     def odom_callback(self, msg):
@@ -423,6 +424,7 @@ class DubinsNode:
             # else:
             #     rospy.loginfo(f"Left speed: {l_speed}, Right speed: {r_speed} going straight")
             self.check_completion()
+            
 
             # Publish markers for visualization
             self.publish_markers(lookahead_point)

@@ -44,7 +44,7 @@ class VizNode:
         print(self.rotation_quat)
 
         self.marker_array = MarkerArray()
-        self.create_markers()
+        # self.create_markers()
         
         self.duckiebot_marker = Marker()
         self.duckiebot_marker.header.frame_id = "map"
@@ -276,7 +276,7 @@ class VizNode:
 
         if closest_detection:
 
-            if min_distance < 0.7:
+            if min_distance < 0.5:
                 angle = np.arctan2(closest_detection.pose.pose.pose.position.z, closest_detection.pose.pose.pose.position.x)
                 if np.radians(45) < angle < np.radians(135):
 
