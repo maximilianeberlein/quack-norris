@@ -19,7 +19,7 @@ class OdometryNode:
 
         self.bot_name = os.environ.get("VEHICLE_NAME")
         # Parameters
-        self.wheel_radius = rospy.get_param('~wheel_radius', 0.0365)  # meters
+        self.wheel_radius = rospy.get_param('~wheel_radius', 0.0375)  # meters
         self.wheel_base = rospy.get_param('~wheel_base', 0.102)  # meters
         self.ticks_per_revolution_left = rospy.get_param('~ticks_per_revolution_left', 135)
         self.ticks_per_revolution_right = rospy.get_param('~ticks_per_revolution_right', 135)
@@ -105,7 +105,7 @@ class OdometryNode:
         odom = Odometry()
         odom.header.stamp = current_time
         odom.header.frame_id = "map"
-        odom.child_frame_id = "base_link"
+        odom.child_frame_id = "base"
 
         odom.pose.pose.position.x = self.x
         odom.pose.pose.position.y = self.y
@@ -118,14 +118,14 @@ class OdometryNode:
 
         self.odom_pub.publish(odom)
 
-        # Broadcast TF
-        # self.tf_broadcaster.sendTransform(
-        #     (self.x, self.y, 0),
-        #     quaternion_from_euler(0, 0, self.theta),
-        #     current_time,
-        #     "base_link",
-        #     "odom"
-        # )
+        #Broadcast TF
+        self.tf_broadcaster.sendTransform(
+            (self.x, self.y, 0),
+            quaternion_from_euler(0, 0, self.theta),
+            current_time,
+            "base",
+            "odom"
+        )
 
     def spin(self):
         rate = rospy.Rate(10)  # 10 Hz
