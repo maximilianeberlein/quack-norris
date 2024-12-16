@@ -38,10 +38,14 @@ class WheelSpeedControllerNode:
         self.r_last_time = rospy.Time.now()
         self.l_speed = 0
         self.r_speed = 0
-        self.integral = 0
+        self.speed_integral = 0
+        self.speed_derivative = 0
+        self.angular_integral = 0
+        self.angular_derivative = 0
         self.l_last_time = rospy.Time.now()
         self.r_last_time = rospy.Time.now()
-
+        self.speed_previous_error = 0
+        self.angular_previous_error = 0
         self.desired_angular_speed = 0  
         self.angular_speed = 0
         self.v_max = 0.8
@@ -83,6 +87,7 @@ class WheelSpeedControllerNode:
         # You can publish the wheel commands using self.wheel_cmd_pub.publish(wheel_msg)
         desired_l_speed = msg.vel_left *self.v_max
         desired_r_speed = msg.vel_right *self.v_max
+        # print(f'Desired left speed: {desired_l_speed}, Desired right speed: {desired_r_speed}')
         l_error = Float32(data=desired_l_speed - self.l_speed)
         r_error = Float32(data=desired_r_speed - self.r_speed)
         self.l_error.publish(l_error)
@@ -93,18 +98,23 @@ class WheelSpeedControllerNode:
         else:
             u_l = self.pid_correction_speed(desired_l_speed, self.l_speed)
             u_r = self.pid_correction_speed(desired_r_speed, self.r_speed)
-            t_l = self.pid_correction_angular(self.desired_angular_speed, self.angular_speed)
-            t_r = self.pid_correction_angular(self.desired_angular_speed, self.angular_speed)
+            if self.desired_angular_speed > 0:
+                t_l = self.pid_correction_angular(self.desired_angular_speed, self.angular_speed)
+                t_r = self.pid_correction_angular(self.desired_angular_speed, self.angular_speed)
+            else:
+                t_l= 0
+                t_r= 0
+            # rospy.loginfo(f'Left angular we give: {t_l}, Right angular: {t_r}, Left speed we give: {u_l}, Right speed: {u_r}')
             u_l -= t_l
             u_r += t_r
         wheel_msg = WheelsCmdStamped()
         wheel_msg.vel_left = (desired_l_speed + u_l)/0.8
         wheel_msg.vel_right = (desired_r_speed + u_r)/0.8
-        rospy.loginfo(f'Left speed we give: {wheel_msg.vel_left}, Right speed: {wheel_msg.vel_right}')
+        # rospy.loginfo(f'Left speed we give: {wheel_msg.vel_left}, Right speed: {wheel_msg.vel_right}')
         self.wheel_cmd_pub.publish(wheel_msg)
     def pid_correction_speed(self, desired_speed, current_speed):
         kp = 0.4
-        ki = 0.1
+        ki = 0.0
         kd = 0.01
 
         if not hasattr(self, 'integral'):
@@ -113,16 +123,17 @@ class WheelSpeedControllerNode:
             self.previous_error = 0
 
         error = desired_speed - current_speed
-        self.integral += error
-        derivative = error - self.previous_error
+        self.speed_integral += error
+        self.speed_integral = np.clip(self.speed_integral, -0.3, 0.3)
+        derivative = error - self.speed_previous_error
 
-        self.previous_error = error
+        self.speed_previous_error = error
 
-        return kp * error + ki * self.integral + kd * derivative
+        return kp * error + ki * self.speed_integral + kd * derivative
     def pid_correction_angular(self, desired_theta_dot, current_theta_dot):
-        kp = 0.1
-        ki = 0.01
-        kd = 0.01
+        kp = 0.2
+        ki = 0.1
+        kd = 0.0
 
         if not hasattr(self, 'integral'):
             self.integral = 0
@@ -130,13 +141,16 @@ class WheelSpeedControllerNode:
             self.previous_error = 0
 
         error = desired_theta_dot - current_theta_dot
-        self.integral += error
-        self.integral = np.clip(self.integral, -0.3, 0.3)
-        derivative = error - self.previous_error
 
-        self.previous_error = error
+        error =  np.clip(error, -np.abs(desired_theta_dot), np.abs(desired_theta_dot))
+        self.angular_integral += error
+        self.angular_integral = np.clip(self.angular_integral, -0.2, 0.2)
+        print(desired_theta_dot, current_theta_dot, error)
+        derivative = error - self.angular_previous_error
 
-        return kp * error + ki * self.integral + kd * derivative
+        self.angular_previous_error = error
+
+        return kp * error + ki * self.angular_integral + kd * derivative
     def run(self):
         rate = rospy.Rate(20)
         while not rospy.is_shutdown():

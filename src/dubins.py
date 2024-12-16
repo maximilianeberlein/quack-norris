@@ -9,6 +9,7 @@ from duckietown_msgs.msg import WheelEncoderStamped, WheelsCmdStamped
 from std_msgs.msg import Float32, ColorRGBA
 from quack_norris.msg import TagInfo
 import shapely.geometry as sg
+import matplotlib.pyplot as plt
 import tf
 from typing import List
 import os
@@ -73,10 +74,11 @@ class DubinsNode:
         self.duckie_path = None
         self.pursuit_path = None
         self.running_dubs = False
-        self.speed = 0.1
+        self.speed = 0.2
         self.v_max = 0.8
         self.do_dubins = False
         self.need_to_fix_angle = False
+        self.past_poses = []
         self.corner = None
         rospy.on_shutdown(self.shutdown_duckie)
     def odom_callback(self, msg):
@@ -359,6 +361,7 @@ class DubinsNode:
         dist_to_end = np.sqrt((self.se_pose.x - self.pursuit_path[-1,0])**2 + (self.se_pose.y - self.pursuit_path[-1,1])**2)
         angle_deviation = np.abs(self.se_pose.theta - self.pursuit_path[-1,2])
         # print(f"Distance to end: {dist_to_end}, Angle deviation: {angle_deviation}, target angle: {self.pursuit_path[-1,2]}")
+        self.past_poses.append([self.se_pose.x, self.se_pose.y, self.se_pose.theta])
         if dist_to_end <0.1:
             wheels_cmd = WheelsCmdStamped()
             wheels_cmd.header.stamp = rospy.Time.now()
@@ -369,6 +372,32 @@ class DubinsNode:
             
             self.running_dubs = False
             self.need_to_fix_angle = True
+            self.plot_dubins(self.past_poses)
+            self.past_poses = []
+
+    def plot_dubins(self,past_poses):
+        plt.clf()
+        map_image = plt.imread("/code/catkin_ws/src/user_code/quack-norris/map_files/quack_middle_cropped.png")
+        plt.imshow(map_image)
+        im_h, im_w, _ = map_image.shape
+            # Plot the pursuit path
+        if self.pursuit_path is not None:
+            x_coords = self.pursuit_path[:, 0]*213 
+            y_coords =im_h - self.pursuit_path[:, 1]*213
+            plt.plot( x_coords,y_coords, 'b-', label='Pursuit Path')
+            
+        corner_x, corner_y = self.corner.shapely_obs.exterior.xy
+        corner_x = np.array(corner_x)  # Convert to numpy array
+        corner_y = np.array(corner_y)  # Convert to numpy array
+        plt.plot(corner_x * 213, im_h - corner_y * 213, 'g-', label='Corner Obstacle')
+        
+        for pose in past_poses:
+            x, y, theta = pose
+            plt.arrow( x * 213,im_h- y * 213, np.cos(theta) * 10, np.sin(theta) * 10, head_width=0.01, head_length=0.02, fc='r', ec='r')
+
+        timestamp = rospy.Time.now().to_sec()
+        plt.savefig(f'/code/catkin_ws/src/user_code/quack-norris/plots/dubins_plots/dubins_plot_{timestamp}.png')
+
     def shutdown_duckie(self):
         rospy.loginfo("Shutting down... stopping the robot.")
         self.desired_wheel_cmd_pub.publish(WheelsCmdStamped())

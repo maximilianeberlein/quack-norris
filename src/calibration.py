@@ -90,21 +90,57 @@ class Calibration:
         rospy.wait_for_message('/wheel_encoder/odom', Odometry)
         timer = rospy.Time.now()
         while not rospy.is_shutdown():
-            if rospy.Time.now() - timer > rospy.Duration(20):
+            # if rospy.Time.now() - timer > rospy.Duration(65):
+            #     wheel_cmd = WheelsCmdStamped()
+            #     wheel_cmd.header.stamp = rospy.Time.now()
+            #     wheel_cmd.vel_left = 0
+            #     wheel_cmd.vel_right = 0
+            #     self.wheel_cmd_pub.publish(wheel_cmd)
+            #     plt.plot(self.left_speed)
+    
+            #     plt.axhline(y=self.desired_speed_actual, color='r', linestyle='--')
+            #     plt.grid()
+
+            #     plt.plot(self.right_speed)
+            #     plt.savefig('/code/catkin_ws/src/user_code/quack-norris/plots/calibration.png')
+            #     rospy.signal_shutdown("Reached target position")
+            # elif rospy.Time.now() - timer > rospy.Duration(45):
+            feed_forward_timer = (np.pi/12) /0.5
+            count = 1
+            
+            while count<= 7:  # Example duration for the loop
+                # Publish the command
+                
+                feed_forward = feed_forward_timer*count
+                print(f' sector = {np.rad2deg(count*feed_forward_timer/2)}')
                 wheel_cmd = WheelsCmdStamped()
                 wheel_cmd.header.stamp = rospy.Time.now()
+                wheel_cmd.vel_left = 0.275 / self.v_max
+                wheel_cmd.vel_right = 0.325 / self.v_max
+                self.desired_wheel_cmd_pub.publish(wheel_cmd)
+                self.desired_angular_speed.publish(Float32(data=0.5))
+                
+                # Sleep for feed_forward_timer
+                rospy.sleep(feed_forward)
+                
+                # Set the speed to 0
                 wheel_cmd.vel_left = 0
                 wheel_cmd.vel_right = 0
-                self.wheel_cmd_pub.publish(wheel_cmd)
-                plt.plot(self.left_speed)
-    
-                plt.axhline(y=self.desired_speed_actual, color='r', linestyle='--')
-                plt.grid()
+                self.desired_wheel_cmd_pub.publish(wheel_cmd)
+                self.desired_angular_speed.publish(Float32(data=0))
+                rospy.sleep(1)
 
-                plt.plot(self.right_speed)
-                plt.savefig('/code/catkin_ws/src/user_code/quack-norris/plots/calibration.png')
-                rospy.signal_shutdown("Reached target position")
-            elif rospy.Time.now() - timer > rospy.Duration(5):
+                count +=1 
+            
+            
+            
+            feed_forward_timer = (np.pi/12) /1
+            count = 1
+                
+            while count<=7:  # Example duration for the loop
+                # Publish the command
+                feed_forward = feed_forward_timer*count
+                print(f' sector = {np.rad2deg(count*feed_forward_timer)}')
                 wheel_cmd = WheelsCmdStamped()
                 wheel_cmd.header.stamp = rospy.Time.now()
                 wheel_cmd.vel_left = 0.249/self.v_max
@@ -112,6 +148,48 @@ class Calibration:
                 self.desired_wheel_cmd_pub.publish(wheel_cmd)
                 self.desired_angular_speed.publish(Float32(data=1.0))
                 
+                # Sleep for feed_forward_timer
+                rospy.sleep(feed_forward)
+                
+                # Set the speed to 0
+                wheel_cmd.vel_left = 0
+                wheel_cmd.vel_right = 0
+                self.desired_wheel_cmd_pub.publish(wheel_cmd)
+                self.desired_angular_speed.publish(Float32(data=0))
+                rospy.sleep(1)
+    
+                count +=1 
+            
+            
+                
+        
+            feed_forward_timer = (np.pi/12) /1
+            count = 1
+            while count<=7:  # Example duration for the loop
+                # Publish the command
+                feed_forward = feed_forward_timer*count
+                print(f' sector = {np.rad2deg(count*feed_forward_timer)}')
+                wheel_cmd = WheelsCmdStamped()
+                wheel_cmd.header.stamp = rospy.Time.now()
+                wheel_cmd.vel_left = 0.05/self.v_max
+                wheel_cmd.vel_right = 0.15/self.v_max
+                self.desired_wheel_cmd_pub.publish(wheel_cmd)
+                self.desired_angular_speed.publish(Float32(data=1.0))
+                
+                # Sleep for feed_forward_timer
+                rospy.sleep(feed_forward)
+                
+                # Set the speed to 0
+                wheel_cmd.vel_left = 0
+                wheel_cmd.vel_right = 0
+                self.desired_wheel_cmd_pub.publish(wheel_cmd)
+                self.desired_angular_speed.publish(Float32(data=0))
+                rospy.sleep(1)
+
+                count +=1 
+                
+            rospy.signal_shutdown("Reached target position")
+            
                 
             
                 
