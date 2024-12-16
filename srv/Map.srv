@@ -1,0 +1,10 @@
+# Request
+bool start      # 'True' iff first call to initalize map. Node will then be ignored
+Node node
+
+---
+# Response
+bool success    # Status of the operation
+string message  # Feedback message
+
+Node[] nodes
