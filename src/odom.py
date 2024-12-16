@@ -89,15 +89,17 @@ class OdometryNode:
         
         left_distance = (2 * np.pi * self.wheel_radius * left_ticks) / self.ticks_per_revolution_left
         right_distance = (2 * np.pi * self.wheel_radius * right_ticks) / self.ticks_per_revolution_right
-        l_speed = Float32(left_distance/dt)
-        r_speed = Float32(right_distance/dt)
-        self.l_error.publish(l_speed)
-        self.r_error.publish(r_speed)
+        l_speed =left_distance/dt
+        r_speed = right_distance/dt
+        
         self.angular_speed.publish(Float32(self.imu_yaw_vel))
+
         # Compute linear and angular velocity
         linear_velocity = (left_distance + right_distance) / (2.0 * dt)
         angular_velocity = self.imu_yaw_vel
         self.imu_yaw_vel_array = []
+        self.l_error.publish(Float32(l_speed))
+        self.r_error.publish(Float32(r_speed))
         # Update pose
         self.theta += angular_velocity * dt
         self.x += linear_velocity * dt * np.cos(self.theta)
@@ -130,7 +132,7 @@ class OdometryNode:
         )
 
     def spin(self):
-        rate = rospy.Rate(20)  # 10 Hz
+        rate = rospy.Rate(30)  # 10 Hz
         rospy.wait_for_message(f'/{self.bot_name}/left_wheel_encoder_node/tick', WheelEncoderStamped)
         rospy.wait_for_message(f'/{self.bot_name}/right_wheel_encoder_node/tick', WheelEncoderStamped)
         self.last_time = rospy.Time.now()
