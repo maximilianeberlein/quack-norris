@@ -145,7 +145,7 @@ class WheelSpeedControllerNode:
         error =  np.clip(error, -np.abs(desired_theta_dot), np.abs(desired_theta_dot))
         self.angular_integral += error
         self.angular_integral = np.clip(self.angular_integral, -0.2, 0.2)
-        print(desired_theta_dot, current_theta_dot, error)
+        # print(desired_theta_dot, current_theta_dot, error)
         derivative = error - self.angular_previous_error
 
         self.angular_previous_error = error
@@ -153,6 +153,7 @@ class WheelSpeedControllerNode:
         return kp * error + ki * self.angular_integral + kd * derivative
     def run(self):
         rate = rospy.Rate(20)
+        rospy.wait_for_message(f'/{self.bot_name}/desired_wheel_speed', WheelsCmdStamped)
         while not rospy.is_shutdown():
             rate.sleep()
 
