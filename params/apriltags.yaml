@@ -19,11 +19,10 @@
 #   ] 
 standalone_tags:
   [
-    {id: 58, size: 0.065, name: Right Turn, position: [0.0, 0.585], orientation: [0.7071068, 0.0, 0.0, 0.7071068]}, # [w,x,y,z] Orientation in global frame
-    {id: 20, size: 0.065, name: Stop, position: [0.585, 1.755], orientation: [1.0, 0.0, 0.0, 0.0]}, # [w,x,y,z] Orientation in global frame
-    {id: 2, size: 0.065, name: Yield, position: [2.925, 1.17], orientation: [0.7071068, 0.0, 0.0, -0.7071068]}, # [w,x,y,z] Orientation in global frame
-    {id: 74, size: 0.065, name: traffic light, position: [2.34, 0.0], orientation: [0.0, 0.0, 0.0, 1.0]}, # [w,x,y,z] Orientation in global frame
-    {id: 168, size: 0.065, name: one way, position: [1.4625, 1.805],orientation: [1.0, 0.0, 0.0, 0.0]}, # Orientation via normal vector
+    {id: 58, size: 0.065, name: Right Turn, position: [3.0, 0.6], orientation: [0.7071068, 0.0, 0.0, 0.7071068]}, # [w,x,y,z] Orientation in global frame
+    {id: 168, size: 0.065, name: Stop, position: [1.80,0.0], orientation: [1.0, 0.0, 0.0, 0.0]}, # [w,x,y,z] Orientation in global frame
+    {id: 2, size: 0.065, name: Yield, position: [0.0, 1.17], orientation: [0.7071068, 0.0, 0.0, -0.7071068]}, # [w,x,y,z] Orientation in global frame
+    {id: 74, size: 0.065, name: traffic light, position: [1.20, 1.80], orientation: [0.0, 0.0, 0.0, 1.0]}, # [w,x,y,z] Orientation in global frame
     {id: 386, size: 0.060, name: Slow Xing, position: [1.4625, 0.0], orientation: [0.0, 0.0, 0.0, 1.0]}, # Orientation via normal vector
   
   ]

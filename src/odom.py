@@ -3,9 +3,10 @@
 import rospy
 import numpy as np
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Quaternion, TransformStamped, PoseWithCovarianceStamped
+from geometry_msgs.msg import Quaternion, TransformStamped, PoseStamped
 from tf.transformations import quaternion_from_euler, euler_from_quaternion
-from duckietown_msgs.msg import WheelEncoderStamped
+from duckietown_msgs.msg import WheelEncoderStamped, WheelsCmdStamped
+
 from std_msgs.msg import Float32
 from sensor_msgs.msg import Imu
 import tf
@@ -43,8 +44,10 @@ class OdometryNode:
         self.imu_sub = rospy.Subscriber(f'/{self.bot_name}/imu_node/data', Imu, self.imu_callback)
         self.left_ticks_sub = rospy.Subscriber(f'/{self.bot_name}/left_wheel_encoder_node/tick',WheelEncoderStamped, self.left_ticks_callback)
         self.right_ticks_sub = rospy.Subscriber(f'/{self.bot_name}/right_wheel_encoder_node/tick',WheelEncoderStamped, self.right_ticks_callback)
-        self.get_global_pose = rospy.Subscriber(f'/duckiebot_globalpose', PoseWithCovarianceStamped, self.global_pose_callback)
-
+        self.get_global_pose = rospy.Subscriber(f'/duckiebot_globalpose', PoseStamped, self.global_pose_callback)
+        self.cmd_vel_sub = rospy.Subscriber(f'/{self.bot_name}/wheels_driver_node/wheels_cmd', WheelsCmdStamped, self.cmd_vel_callback)
+        self.r_tick_sign = 1
+        self.l_tick_sign = 1
         self.r_error = rospy.Publisher(f'/{self.bot_name}/right_speed', Float32, queue_size=1)
         self.l_error = rospy.Publisher(f'/{self.bot_name}/left_speed',Float32, queue_size=1)
         self.angular_speed = rospy.Publisher(f'/{self.bot_name}/angular_speed',Float32, queue_size=1)
@@ -55,16 +58,19 @@ class OdometryNode:
         self.imu_yaw_vel_array.append(yaw_vel)
         self.imu_yaw_vel = np.mean(self.imu_yaw_vel_array)
     def left_ticks_callback(self, msg):
-        self.curr_left_ticks = msg.data
-
-    def right_ticks_callback(self, msg):
         self.curr_right_ticks = msg.data
 
+    def right_ticks_callback(self, msg):
+        self.curr_left_ticks = msg.data
+    def cmd_vel_callback(self, msg):
+        self.r_tick_sign = 1 if msg.vel_left >= 0 else -1
+        self.l_tick_sign = 1 if msg.vel_right >= 0 else -1
+
     def global_pose_callback(self, msg):
-        self.x = msg.pose.pose.position.x
-        self.y = msg.pose.pose.position.y
+        self.x = msg.pose.position.x
+        self.y = msg.pose.position.y
         
-        q = msg.pose.pose.orientation
+        q = msg.pose.orientation
         quaternion = [q.x, q.y, q.z, q.w]
 
         # Convert quaternion to Euler angles
@@ -82,8 +88,8 @@ class OdometryNode:
         self.last_time = current_time
 
         # Compute wheel displacements
-        left_ticks = self.curr_left_ticks - self.previous_left_ticks
-        right_ticks = self.curr_right_ticks - self.previous_right_ticks
+        left_ticks = -(self.curr_left_ticks - self.previous_left_ticks)
+        right_ticks = -(self.curr_right_ticks -  self.previous_right_ticks)
         self.previous_left_ticks = self.curr_left_ticks
         self.previous_right_ticks = self.curr_right_ticks
         

@@ -24,10 +24,10 @@ p2 = SETransform(19*a, a, 0)
 p3 = SETransform(19*a, 11*a, np.pi/2)
 p4 = SETransform(a, 11*a, np.pi)
 
-p1 = DuckieNode(p1, tag_id=58)
-p2 = DuckieNode(p2, tag_id=74)
-p3 = DuckieNode(p3, tag_id=2)
-p4 = DuckieNode(p4, tag_id=20)
+p1 = DuckieNode(p1, tag_id=2)
+p2 = DuckieNode(p2, tag_id=168)
+p3 = DuckieNode(p3, tag_id=58)
+p4 = DuckieNode(p4, tag_id=74)
 
 p1.insert_next(p2)
 p2.insert_next(p3)
@@ -53,12 +53,13 @@ class DubinsNode:
         self.bot_name = os.environ.get("VEHICLE_NAME", "duckiebot")
         self.wheel_base = rospy.get_param('~wheel_base', 0.102)
         
-        self.odom_sub = rospy.Subscriber('/odometry/filtered', Odometry, self.odom_callback)
+        self.odom_sub = rospy.Subscriber('/wheel_encoder/odom', Odometry, self.odom_callback)
         self.tag_info_sub = rospy.Subscriber(f'/{self.bot_name}/tag_info', TagInfo, self.tag_info_callback, buff_size = 1)
         
         self.marker_pub = rospy.Publisher('/dubins_marker', Marker, queue_size=1)
         self.dubins_pub = rospy.Publisher('/dubins_path', Marker, queue_size=1)
-        self.desired_wheel_cmd_pub = rospy.Publisher(f'/{self.bot_name}/desired_wheel_speed', WheelsCmdStamped, queue_size=1)
+        self.desired_wheel_cmd_pub = rospy.Publisher(f'/{self.bot_name}/wheels_driver_node/wheels_cmd', WheelsCmdStamped, queue_size=1)
+        #self.desired_wheel_cmd_pub = rospy.Publisher(f'/{self.bot_name}/desired_wheel_speed', WheelsCmdStamped, queue_size=1)
         self.desired_angular_speed = rospy.Publisher(f'/{self.bot_name}/desired_angular_speed', Float32, queue_size=1)
         self.se_pose = SETransform(0,0,0)
         self.tag_info = None
@@ -406,7 +407,7 @@ class DubinsNode:
         rate = rospy.Rate(10)
         #init by popping the first node 
         self.next_node = self.path.pop(0)
-        rospy.wait_for_message('/odometry/filtered', Odometry)
+        rospy.wait_for_message('/wheel_encoder/odom', Odometry)
         while not rospy.is_shutdown():
             
             # rospy.loginfo(f'tag id we look_ for = {self.next_node.tag_id}')
@@ -471,8 +472,8 @@ class DubinsNode:
 
             wheels_cmd = WheelsCmdStamped()
             wheels_cmd.header.stamp = rospy.Time.now()
-            wheels_cmd.vel_left = l_speed / self.v_max
-            wheels_cmd.vel_right = r_speed / self.v_max
+            wheels_cmd.vel_left = -r_speed / self.v_max
+            wheels_cmd.vel_right = -l_speed / self.v_max
             rospy.loginfo(f"Left speed: {l_speed}, Right speed: {r_speed}")
             self.desired_wheel_cmd_pub.publish(wheels_cmd)
             # if self.running_dubs:

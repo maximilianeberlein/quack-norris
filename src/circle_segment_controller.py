@@ -64,6 +64,7 @@ class CircleSegmentController:
                 timer = rospy.Time.now()
                 count = 1
             speed_l, speed_r, omega = self.inverse_kinematics(radius,speed)
+            omega = -omega
             sector = 5 * count
             rospy.loginfo(f"sector: {sector}")
             sector_rad = np.deg2rad(sector)
@@ -75,8 +76,8 @@ class CircleSegmentController:
             while np.abs(self.theta - goal_theta) > 0.05:
                 msg = WheelsCmdStamped()
                 msg.header.stamp = rospy.Time.now()
-                msg.vel_left = speed_l
-                msg.vel_right = speed_r
+                msg.vel_left = -speed_l
+                msg.vel_right = -speed_r
 
                 self.wheel_cmd_pub.publish(msg)
                 self.angular_speed_pub.publish(omega)

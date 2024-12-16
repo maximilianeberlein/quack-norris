@@ -3,12 +3,13 @@
 import rospy
 import yaml
 from visualization_msgs.msg import Marker, MarkerArray
-from geometry_msgs.msg import Point, Quaternion, Vector3, PoseWithCovarianceStamped, Pose
+from geometry_msgs.msg import Point, Quaternion, Vector3, PoseStamped, Pose
 from apriltag_ros.msg import AprilTagDetectionArray
 from pyquaternion import Quaternion as PyQuaternion
 import numpy as np
 from nav_msgs.msg import Odometry
-from tf.transformations import euler_from_quaternion, quaternion_from_euler
+import tf 
+from tf.transformations import euler_from_quaternion, quaternion_from_euler, quaternion_multiply
 
 
 class LocalizationNode:
@@ -16,7 +17,7 @@ class LocalizationNode:
         rospy.init_node('viz_node', anonymous=True)
         
 
-        self.globalpose_pub = rospy.Publisher('/duckiebot_globalpose', PoseWithCovarianceStamped, queue_size=10)
+        self.globalpose_pub = rospy.Publisher('/duckiebot_globalpose', PoseStamped, queue_size=10)
         self.tag_sub = rospy.Subscriber('/tag_detections', AprilTagDetectionArray, self.self_localization_callback)    
 
         self.yaml_file = rospy.get_param('~yaml_file', '/code/catkin_ws/src/user_code/quack-norris/params/apriltags.yaml')
@@ -27,11 +28,12 @@ class LocalizationNode:
         self.waypoints = self.load_waypoints(self.yaml_file)
         self.waypoint_dict = {waypoint['id']: waypoint for waypoint in self.waypoints}
         self.world_coords = PyQuaternion(axis=[0, 0, 1], angle=np.pi)
+        self.tf_listener = tf.TransformListener()
 
-        self.pose_msg = PoseWithCovarianceStamped()
+        self.pose_msg = PoseStamped()
         self.pose_msg.header.frame_id = "map"
         # Set covariance to zero for simplicity, we can adjust this as needed
-        self.pose_msg.pose.covariance = [1e-9 if i % 7 == 0 else 0 for i in range(36)]
+        #self.pose_msg.pose.covariance = [1e-9 if i % 7 == 0 else 0 for i in range(36)]
         
 
     def load_waypoints(self, yaml_file):
@@ -66,6 +68,7 @@ class LocalizationNode:
 
                     # this part needs some comments, some stuff was only found by trial and error
                     if matching_waypoint:
+                        print(f"Found matching waypoint: {matching_waypoint['id']}, position: {matching_waypoint['position']}, orientation: {matching_waypoint['orientation']}")
 
                         camera_to_apriltag_transform = PyQuaternion(closest_detection.pose.pose.pose.orientation.w, closest_detection.pose.pose.pose.orientation.x, closest_detection.pose.pose.pose.orientation.y, closest_detection.pose.pose.pose.orientation.z)
                         waypoint_orientation = PyQuaternion(matching_waypoint['orientation'][3], matching_waypoint['orientation'][0], matching_waypoint['orientation'][1], matching_waypoint['orientation'][2])
@@ -88,9 +91,20 @@ class LocalizationNode:
                             0.07
                         )
                         self.globalorientation = quaternion_from_euler(0, 0, np.arctan2(np.sin(total_yaw), np.cos(total_yaw))) 
-
+                        rotation_quaternion = quaternion_from_euler(0, 0, np.pi)
+                        rotated_orientation = quaternion_multiply(self.globalorientation, rotation_quaternion)
+                        self.globalorientation = rotated_orientation
+                        # try:
+                        #     (trans, rot) = self.tf_listener.lookupTransform('/camera', '/base', rospy.Time(0))
+                        #     self.pose_msg.header.frame_id = '/camera'
+                        #     self.pose_msg.pose.position = self.globalpose
+                        #     self.pose_msg.pose.orientation = Quaternion(*self.globalorientation)
+                        #     transformed_pose = self.tf_listener.transformPose('base', self.pose_msg)
+                        #     self.pose_msg.pose = transformed_pose.pose
+                        # except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+                        #     rospy.logwarn("TF Exception")
                         self.pose_msg.header.stamp = rospy.Time.now()
-                        self.pose_msg.pose.pose = Pose(
+                        self.pose_msg.pose = Pose(
                             position=self.globalpose,
                             orientation= Quaternion(-self.globalorientation[0], -self.globalorientation[1], -self.globalorientation[2], self.globalorientation[3])
                         )
