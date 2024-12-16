@@ -22,7 +22,7 @@ class OdometryNode:
         # Parameters
         self.wheel_radius = rospy.get_param('~wheel_radius', 0.0375)  # meters
         self.wheel_base = rospy.get_param('~wheel_base', 0.102)  # meters
-        self.ticks_per_revolution_left = rospy.get_param('~ticks_per_revolution_left', 135)
+        self.ticks_per_revolution_left = rospy.get_param('~ticks_per_revolution_left', 142)
         self.ticks_per_revolution_right = rospy.get_param('~ticks_per_revolution_right', 135)
 
         # State
