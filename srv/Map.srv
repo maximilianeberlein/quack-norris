@@ -1,6 +1,6 @@
 # Request
-bool start      # 'True' iff first call to initalize map. Node will then be ignored
-Node node
+Node start_node # Or faulty node
+Node goal_node  # Or None if update instead of init
 
 ---
 # Response
