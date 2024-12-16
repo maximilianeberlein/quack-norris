@@ -8,52 +8,21 @@ from geometry_msgs.msg import Pose2D
 from quack_norris.srv import Map, MapResponse   # type: ignore
 from quack_norris.msg import Node, Corner  # type: ignore
 
-# from quack_norris_utils.utils import corner_to_duckiecorner, node_to_duckienode   # type: ignore
 from quack_norris_utils.utils import find_closest_points, plot_solved_graph   # type: ignore
-# from quack_norris_utils.utils import TILE_SIZE  # type: ignore
-TILE_DATA = {"TILE_SIZE": 0.585, "D_CENTER_TO_CENTERLINE": 0.2925, "CENTERLINE_WIDTH": 0.025, "LANE_WIDTH": 0.205} # m
+from quack_norris_utils.utils import fill_path_corners, MapNode   # type: ignore
 
 from typing import List, Dict, Tuple, Optional
 
-class MapNode:
-    def __init__(self, index_x: int, index_y: int, apriltag_id: int):
-        self.center_index:  Tuple[int, int]     = (index_x, index_y)
-        self.apriltag_id:   int                 = apriltag_id
-        self.neighbors:     List[MapNode]       = []
-
-    def __repr__(self):
-        return f"MapNode(Center: {self.center_index}, ID: {self.apriltag_id})"
-    
-def node_to_mapnode(node: Node) -> MapNode:
-    index_x, index_y = tile_pos_to_index((node.pose.x, node.pose.y))
-    return MapNode(index_x, index_y, node.apriltag_id)
-
-def mapnode_to_node(mapnode: MapNode, corner: Corner) -> Node:
-    xabs, yabs = tile_index_to_pos(mapnode.center_index)
-    return Node(pose=Pose2D(x=xabs, y=yabs, theta=0), # Theta?
-                apriltag_id=mapnode.apriltag_id,
-                corner=corner)
-
-def tile_pos_to_index(pos: Tuple[float, float]) -> Tuple[int, int]:
-    rospy.loginfo(f"Converting position {pos} to index {int(pos[0] / TILE_DATA['TILE_SIZE'])}, {int(pos[1] / TILE_DATA['TILE_SIZE'])}")
-    return (int(pos[0] / TILE_DATA["TILE_SIZE"]), int(pos[1] / TILE_DATA["TILE_SIZE"]))
-
-def tile_index_to_pos(index: Tuple[int, int]) -> Tuple[float, float]:
-    return ((index[0] + 0.5) * TILE_DATA["TILE_SIZE"], (index[1] + 0.5) * TILE_DATA["TILE_SIZE"])
-
 class MapServiceNode:
     def __init__(self):
-        # Map initialization or update
-        self.initialized = False
-
-        # Internal state to store the map
+        # Internal states to store the map
         self.nodes: List[MapNode]   = []
+        self.goal_node:  MapNode    = None
         self.path:  List[MapNode]   = []  # Saves last saved path. Used to remove path with obstacles
-        self.csv_file = rospy.get_param('~map_csvfile', '/code/catkin_ws/src/user_code/quack-norris/params/csv/main_map.csv')
-        self.load_map()
 
-        # Create the service
-        self.service = rospy.Service("map_service", Map, self.handle_request)
+        # Init
+        self.csv_file   = rospy.get_param('~map_csvfile', '/code/catkin_ws/src/user_code/quack-norris/params/csv/main_map.csv')
+        self.service    = rospy.Service("map_service", Map, self.handle_request)
         rospy.loginfo("Map service ready.")
 
     def load_map(self):
@@ -80,11 +49,6 @@ class MapServiceNode:
                     neighbour = self.nodes[neighbour_index]
                     node.neighbors.append(neighbour)
 
-        # raw_path = self.astar_search(self.nodes[0], self.nodes[5])
-        # path = self.fill_path_corners(raw_path)
-        # plot_solved_graph(self.nodes, raw_path, "/home/duckie/repos/quack-norris/src/solved_graph.png")
-        # exit(1)
-
     def get_index_via_pos(self, pos: Tuple[int, int]) -> Tuple[int, int]:
         for index, node in enumerate(self.nodes):
             if node.center_index == pos:
@@ -96,15 +60,6 @@ class MapServiceNode:
             if node.apriltag_id == apriltag_id:
                 return index
         return None
-    
-    def get_node(self, index: int) -> MapNode:
-        if index is None:
-            rospy.logerr(f"Node index is None (i.e. Node may not exist). Exiting...")
-            exit(1)
-        if index < 0 or index >= len(self.nodes):
-            rospy.logerr(f"Node index {index} out of bounds. Exiting...")
-            exit(1)
-        return self.nodes[index]
     
     def get_node(self, apriltag_id: int = None, center_index: Tuple[int, int] = None) -> MapNode:
         # Apriltag has priority
@@ -125,13 +80,20 @@ class MapServiceNode:
         return self.nodes[index]
 
     def handle_request(self, req):
-        # rospy.loginfo(f"Received request: {req}")
-        # start_node  = self.nodes[self.get_index_via_id(req.start_node.apriltag_id)]
-        # goal_node   = self.nodes[self.get_index_via_id(req.goal_node.apriltag_id)]
-        start_node  = self.get_node(req.start_node.apriltag_id)
-        goal_node   = self.get_node(req.goal_node.apriltag_id)
-        if self.initialized: # Remove path with obstacle
-            # rospy.loginfo(f"Removing path with obstacle from start node {start_node.center_index} to goal node {goal_node.center_index}")
+        if req.reset:
+            # Reset
+            self.nodes = []
+            self.path = []
+            self.load_map()
+
+            start_node  = self.get_node(req.start_node.apriltag_id)
+            goal_node   = self.get_node(req.goal_node.apriltag_id)
+            self.goal_node = goal_node
+        else:
+            # Update - remove faulty edge to planned next node
+            start_node  = self.get_node(req.start_node.apriltag_id)
+            goal_node   = self.goal_node
+
             # Find planned next node in path
             if start_node not in self.path:
                 rospy.logerr(f"While updating map: Start node {start_node} not in original path. Exiting...")
@@ -139,26 +101,20 @@ class MapServiceNode:
             for index, node in enumerate(self.path):
                 if node == start_node:
                     break
-            # rospy.loginfo(f"Index: {index}. Length: {len(self.path)}")
             next_node = self.path[index + 1]
 
             # Remove planned next node from current node's neighbors, as it is blocked
-            # rospy.loginfo(f"Removing node {next_node.center_index} from node {start_node.center_index}'s neighbors")
-            # rospy.loginfo(f"Neighbors before: {start_node.neighbors}")
             for index, node in enumerate(start_node.neighbors):
                 if node.center_index == next_node.center_index:
                     start_node.neighbors.pop(index)
                     break
-            # rospy.loginfo(f"Neighbors after: {start_node.neighbors}")
 
-        self.initialized = True
         shortest_path = self.astar_search(start_node, goal_node)
 
-        # rospy.loginfo(f"Start: {start_node.center_index}, Goal: {goal_node.center_index}")
         if shortest_path is not None:
             self.path = shortest_path
             # plot_solved_graph(self.nodes, shortest_path, f"/home/duckie/repos/quack-norris/src/solved_graph{random.randint(0, 1000)}.png")
-            full_path = self.fill_path_corners(shortest_path)
+            full_path = fill_path_corners(shortest_path)
             return MapResponse(
                 success=True,
                 message=f"Successfully calculated shortest path from ({req.start_node.pose.x}, {req.start_node.pose.y}) to ({req.goal_node.pose.x}, {req.goal_node.pose.y})",
@@ -218,43 +174,6 @@ class MapServiceNode:
 
         # No path was found
         return None
-    
-    def fill_path_corners(self, path: List[MapNode]) -> List[MapNode]:
-        """
-        Fill in the corners of each node in the path. Used in the local planner later.
-
-        Args:
-            path (List[MapNode]): Path to fill with corners
-
-        Returns:
-            List[MapNode]: Path with corners
-        """
-        filled_path = [mapnode_to_node(path[0], Corner())]
-        for node in path[1:-1]:
-            prev_node = path[path.index(node) - 1]
-            next_node = path[path.index(node) + 1]
-
-            # Find the corner between the previous and next node
-            prev_node_pos = np.array(prev_node.center_index)
-            next_node_pos = np.array(next_node.center_index)
-            curr_node_pos = np.array(node.center_index)
-            if np.array_equal(prev_node_pos, curr_node_pos) or np.array_equal(curr_node_pos, next_node_pos):
-                raise ValueError("Two nodes in the path have the same position - Should not happen. Exiting...")
-            vec_to = (curr_node_pos - prev_node_pos) / np.linalg.norm(curr_node_pos - prev_node_pos)
-            vec_from = (next_node_pos - curr_node_pos) / np.linalg.norm(next_node_pos - curr_node_pos)
-            dir = int(np.cross(vec_from, vec_to))
-            
-            corner_pos = np.array(tile_index_to_pos(curr_node_pos)) + (vec_from - vec_to) * TILE_DATA["TILE_SIZE"] / 2
-            corner_theta = -dir * np.pi / 4 # +/-?
-            corner_radius = abs(dir)*(TILE_DATA["D_CENTER_TO_CENTERLINE"] + TILE_DATA["CENTERLINE_WIDTH"] / 2 + TILE_DATA["LANE_WIDTH"] / 2)
-            corner_type = dir # -1: LEFT, 0: STRAIGHT, 1: RIGHT
-            corner = Corner(pose=Pose2D(x=corner_pos[0], y=corner_pos[1], theta=corner_theta),
-                            radius=corner_radius,
-                            type=corner_type)
-            filled_path.append(mapnode_to_node(node, corner))
-            
-        filled_path.append(mapnode_to_node(path[-1], Corner()))
-        return filled_path
 
 if __name__ == "__main__":
     rospy.init_node("map_service_node")

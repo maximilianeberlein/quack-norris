@@ -1,4 +1,5 @@
 # Request
+bool reset
 Node start_node # Or faulty node
 Node goal_node  # Or None if update instead of init
 
