@@ -60,7 +60,7 @@ class LocalizationNode:
 
         if closest_detection:
 
-            if min_distance < 0.6:
+            if min_distance < 0.9:
                 angle = np.arctan2(closest_detection.pose.pose.pose.position.z, closest_detection.pose.pose.pose.position.x)
                 if np.radians(45) < angle < np.radians(135):
 

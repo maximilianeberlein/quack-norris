@@ -24,9 +24,9 @@ p2 = SETransform(19*a, a, 0)
 p3 = SETransform(19*a, 11*a, np.pi/2)
 p4 = SETransform(a, 11*a, np.pi)
 
-p1 = DuckieNode(p1, tag_id=58)
+p1 = DuckieNode(p1, tag_id=395)
 p2 = DuckieNode(p2, tag_id=74)
-p3 = DuckieNode(p3, tag_id=2)
+p3 = DuckieNode(p3, tag_id=392)
 p4 = DuckieNode(p4, tag_id=20)
 
 p1.insert_next(p2)
@@ -67,7 +67,7 @@ class DubinsNode:
         self.tag_distance = 10
         self.path = hardcoded_path
         self.node_lookahead = 6*a
-        self.waypoint_lookahead = 8*a
+        self.waypoint_lookahead = 8.5*a
         self.next_node = None
         self.node_in_scope = False
         self.tag_present = False
@@ -109,7 +109,7 @@ class DubinsNode:
     def check_tag(self):
         if self.tag_info is not None:
             # rospy.loginfo(f"Tag {self.tag_info.tag_id} detected, looking for tag {self.next_node.tag_id}")
-            if self.next_node.tag_id == self.tag_info.tag_id and self.tag_distance < 3*a:
+            if self.next_node.tag_id == self.tag_info.tag_id and self.tag_distance < 5*a:
                 #rospy.loginfo(f"Tag {self.tag_info.tag_id} is present, we moving on brahh")
                 self.tag_present = True
             
@@ -321,7 +321,7 @@ class DubinsNode:
 
         lookahead_point = path[lookahead_index]
         print(f'closest point{lookahead_index}, x {lookahead_point}')
-        # self.pursuit_path = self.pursuit_path[lookahead_index:-1]
+        self.pursuit_path = self.pursuit_path[lookahead_index:]
         # self.pursuit_path= self.pursuit_path[lookahead_index:-1]
         # Calculate the steering angle
         gain = 1 #speed /np.clip(self.speed,0.001,10)
@@ -408,7 +408,7 @@ class DubinsNode:
         #     # self.plot_dubins(self.past_poses)
         #     self.past_poses = []
         if self.tag_info is not None:
-            if self.tag_distance < 4*a and self.tag_info.tag_id != self.next_node.parent.tag_id:
+            if self.tag_distance < 7*a and self.tag_info.tag_id != self.next_node.parent.tag_id:
                 print(f'officially done {self.tag_distance,self.tag_info.tag_id,self.next_node.parent.tag_id}')
                 wheels_cmd = WheelsCmdStamped()
                 wheels_cmd.header.stamp = rospy.Time.now()
@@ -491,7 +491,7 @@ class DubinsNode:
             lookahead_point = self.get_line_lookahead()
             if lookahead_point and self.do_dubins and not self.running_dubs:
 
-                goal_pose = self.next_node.pose
+                goal_pose =  self.next_node.pose
                 
                 self.desired_wheel_cmd_pub.publish(WheelsCmdStamped())
                 rospy.sleep(2)
@@ -527,6 +527,9 @@ class DubinsNode:
                     temp_path_array = np.vstack((temp_path_array, partial))
                 self.pursuit_path = temp_path_array
                 l_speed, r_speed =self.pure_pursuit_control(self.pursuit_path, 0.12, 0.102, self.speed)
+                l_speed = 0
+                r_speed = 0
+
 
 
             
