@@ -44,7 +44,7 @@ class VizNode:
         print(self.rotation_quat)
 
         self.marker_array = MarkerArray()
-        # self.create_markers()
+        self.create_markers()
         
         self.duckiebot_marker = Marker()
         self.duckiebot_marker.header.frame_id = "map"
@@ -263,6 +263,8 @@ class VizNode:
     def self_localization_callback(self, msg):
         closest_detection = None
         min_distance = float('inf')
+
+        rospy.loginfo("ylkjxd")
 
         # find closest apriltag and use it for global localization
         for detection in msg.detections:
