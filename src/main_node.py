@@ -81,11 +81,11 @@ class MainNode:
 
         self.start_node = DuckieNode(
             pose=SETransform(x=-1, y=-1, theta=-1), # Position does not matter, ID does
-            tag_id=74 # 58
+            tag_id=1000 # 58
         )
         self.end_node = DuckieNode(
             pose=SETransform(x=-1, y=-1, theta=-1), # Position does not matter, ID does
-            tag_id=20 # 2
+            tag_id=168 # 2
         )
         self.shortest_path = initialize_map(self.start_node, self.end_node)
         if self.shortest_path:
