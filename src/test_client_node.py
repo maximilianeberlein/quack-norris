@@ -30,21 +30,23 @@ if __name__ == "__main__":
     print_path(shortest_path)
 
     # Obstacle found! Update the map
-    start_node = DuckieNode(
+    curr_pos = DuckieNode(SETransform(x=3.2175, y=1.4625, theta=-1))
+    faulty_node = DuckieNode(
         pose=SETransform(x=-1, y=-1, theta=-1), # Position does not matter, ID does
         tag_id=7
     )
     # shortest_path_updated = calculate_shortest_path(start_node, end_node)
-    shortest_path_updated = update_map(start_node)
+    shortest_path_updated = update_map(curr_pos, faulty_node)
     print_path(shortest_path_updated)
 
-    # Oh no! Another obstacle found! Update the map again
-    start_node = DuckieNode(
-        pose=SETransform(x=-1, y=-1, theta=-1), # Position does not matter, ID does
-        tag_id=5
-    )
-    # end_node.tag_id = 100
-    # shortest_path_updated_again = calculate_shortest_path(start_node, end_node)
-    shortest_path_updated_again = update_map(start_node)
-    print_path(shortest_path_updated_again)
+    # # Oh no! Another obstacle found! Update the map again
+    # curr_pos = DuckieNode(SETransform(x=1.4, y=1.4, theta=-1))
+    # faulty_node = DuckieNode(
+    #     pose=SETransform(x=-1, y=-1, theta=-1), # Position does not matter, ID does
+    #     tag_id=5
+    # )
+    # # end_node.tag_id = 100
+    # # shortest_path_updated_again = calculate_shortest_path(start_node, end_node)
+    # shortest_path_updated_again = update_map(curr_pos, faulty_node)
+    # print_path(shortest_path_updated_again)
     

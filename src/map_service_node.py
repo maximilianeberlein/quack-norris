@@ -3,12 +3,9 @@ import csv
 import numpy as np
 import random
 
-from geometry_msgs.msg import Pose2D
-
 from quack_norris.srv import Map, MapResponse   # type: ignore
-from quack_norris.msg import Node, Corner  # type: ignore
 
-from quack_norris_utils.utils import find_closest_points, plot_solved_graph   # type: ignore
+from quack_norris_utils.utils import find_closest_points, plot_solved_graph, tile_pos_to_index   # type: ignore
 from quack_norris_utils.utils import fill_path_corners, MapNode   # type: ignore
 
 from typing import List, Dict, Tuple, Optional
@@ -21,7 +18,7 @@ class MapServiceNode:
         self.path:  List[MapNode]   = []  # Saves last saved path. Used to remove path with obstacles
 
         # Init
-        self.csv_file   = rospy.get_param('~map_csvfile', '/code/catkin_ws/src/user_code/quack-norris/params/csv/oval_map.csv')
+        self.csv_file   = rospy.get_param('~map_csvfile', '/code/catkin_ws/src/user_code/quack-norris/params/csv/main_map.csv')
         self.service    = rospy.Service("map_service", Map, self.handle_request)
         rospy.loginfo("Map service ready.")
 
@@ -87,34 +84,72 @@ class MapServiceNode:
             self.load_map()
 
             start_node  = self.get_node(req.start_node.apriltag_id)
-            goal_node   = self.get_node(req.goal_node.apriltag_id)
-            self.goal_node = goal_node
+            self.goal_node = self.get_node(req.goal_node.apriltag_id)
         else:
             # Update - remove faulty edge to planned next node
-            start_node  = self.get_node(req.start_node.apriltag_id)
-            goal_node   = self.goal_node
+            faulty_node = self.get_node(req.goal_node.apriltag_id)
 
             # Find planned next node in path
-            if start_node not in self.path:
-                rospy.logerr(f"While updating map: Start node {start_node} not in original path. Exiting...")
+            if faulty_node not in self.path:
+                rospy.logerr(f"While updating map: Faulty node {faulty_node} not in original path. Exiting...")
                 exit(1)
             for index, node in enumerate(self.path):
-                if node == start_node:
+                if node == faulty_node:
                     break
             next_node = self.path[index + 1]
 
             # Remove planned next node from current node's neighbors, as it is blocked
-            for index, node in enumerate(start_node.neighbors):
+            next_faulty_node = None
+            rospy.loginfo(f"Faulty node neighbors: {faulty_node.neighbors}")
+            for index, node in enumerate(faulty_node.neighbors):
                 if node.center_index == next_node.center_index:
-                    start_node.neighbors.pop(index)
+                    next_faulty_node = faulty_node.neighbors.pop(index)
                     break
+            # rospy.loginfo(f"Faulty node id: {faulty_node_id}. Is None? {faulty_node_id == None}")
+            if next_faulty_node.apriltag_id == None:
+                rospy.logerr(f"While updating map: Planned next node {next_node} not found in faulty node's {faulty_node} neighbors - Should not happen. Exiting...")
+                exit(1)
 
-        shortest_path = self.astar_search(start_node, goal_node)
+            # Add the current position as a new node
+            x_ind, y_ind = tile_pos_to_index([req.start_node.pose.x, req.start_node.pose.y])
+            if not self.get_index_via_pos((x_ind, y_ind)):
+                start_node = MapNode(x_ind, y_ind, -1)
+                self.nodes.append(start_node)
+                neighbour_positions = find_closest_points(start_node.center_index, [n.center_index for n in self.nodes if n != node])
+                for index, neighbour in enumerate(neighbour_positions):
+                    # Remove apparent neighbours that previously were not neighbours, thus can't be neighbours now
+                    if neighbour not in ([next_node.neighbors, next_node.center_index]) and neighbour not in ([faulty_node.neighbors, faulty_node.center_index]):
+                        neighbour_positions.pop(index)
+                rospy.logwarn(f"New node neighbors: {neighbour_positions}")
+                for neighbour_position in neighbour_positions:
+                    neighbour_index = self.get_index_via_pos(neighbour_position)
+                    if neighbour_index is not None:
+                        neighbour = self.nodes[neighbour_index]
+                        rospy.logwarn(f"Neighbor exists")
+                        if neighbour.apriltag_id != next_faulty_node.apriltag_id:
+                            start_node.neighbors.append(neighbour)
+                            rospy.logwarn(f"Added neighbor {neighbour} to new node {start_node}")
+                updated_node_isnew = True
+            else:
+                start_node = self.nodes[self.get_index_via_pos((x_ind, y_ind))]
+                if start_node == next_node:
+                    start_node = faulty_node
+                updated_node_isnew = False
+
+                    
+        shortest_path = self.astar_search(start_node, self.goal_node)
 
         if shortest_path is not None:
             self.path = shortest_path
             # plot_solved_graph(self.nodes, shortest_path, f"/home/duckie/repos/quack-norris/src/solved_graph{random.randint(0, 1000)}.png")
             full_path = fill_path_corners(shortest_path)
+            if not req.reset and updated_node_isnew:
+                # Remove new node from nodes
+                for index, node in enumerate(self.nodes):
+                    if node.apriltag_id == -1:
+                        self.nodes.pop(index)
+                        break
+
             return MapResponse(
                 success=True,
                 message=f"Successfully calculated shortest path from ({req.start_node.pose.x}, {req.start_node.pose.y}) to ({req.goal_node.pose.x}, {req.goal_node.pose.y})",
