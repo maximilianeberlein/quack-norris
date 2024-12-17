@@ -3,16 +3,9 @@ from quack_norris.srv import Map    # type: ignore
 from quack_norris.msg import Node, Corner   # type: ignore
 from geometry_msgs.msg import Pose2D
 
-from quack_norris_utils.utils import SETransform, DuckieCorner, DuckieNode # type: ignore
+from quack_norris_utils.utils import SETransform, DuckieNode # type: ignore
 from quack_norris_utils.utils import initialize_map, update_map # calculate_shortest_path # type: ignore
-
-def print_path(path):
-    path_str = "Calculated shortest path:\n"
-    for index, node in enumerate(path):
-        path_str += f"{node.tag_id}: ({node.pose.x}, {node.pose.y})"
-        if index != len(path) - 1:
-            path_str += f" -> "
-    rospy.loginfo(path_str)
+from quack_norris_utils.utils import print_path # type: ignore
 
 if __name__ == "__main__":
     rospy.init_node("map_client_node")
@@ -26,7 +19,6 @@ if __name__ == "__main__":
     )
     # shortest_path = calculate_shortest_path(start_node, end_node)
     shortest_path = initialize_map(start_node, end_node)
-    path_str = ""
     print_path(shortest_path)
 
     # Obstacle found! Update the map
