@@ -8,6 +8,8 @@ from apriltag_ros.msg import AprilTagDetectionArray
 from pyquaternion import Quaternion as PyQuaternion
 import numpy as np
 from nav_msgs.msg import Odometry
+from quack_norris.msg import TagInfo
+import os
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
 
 
@@ -15,9 +17,11 @@ class LocalizationNode:
     def __init__(self):
         rospy.init_node('viz_node', anonymous=True)
         
+        self.bot_name = os.environ.get("VEHICLE_NAME")
 
-        self.globalpose_pub = rospy.Publisher('/duckiebot_globalpose', PoseWithCovarianceStamped, queue_size=10)
+        self.globalpose_pub = rospy.Publisher('/duckiebot_globalpose', PoseWithCovarianceStamped, queue_size=1)
         self.tag_sub = rospy.Subscriber('/tag_detections', AprilTagDetectionArray, self.self_localization_callback)    
+        self.tag_info_pub = rospy.Publisher(f'/{self.bot_name}/tag_info', TagInfo, queue_size=1)
 
         self.yaml_file = rospy.get_param('~yaml_file', '/code/catkin_ws/src/user_code/quack-norris/params/apriltags.yaml')
         
@@ -66,7 +70,14 @@ class LocalizationNode:
 
                     # this part needs some comments, some stuff was only found by trial and error
                     if matching_waypoint:
-
+                        tag_info = TagInfo()
+                        tag_info.tag_id = tag_id
+                        tag_info.y = -closest_detection.pose.pose.pose.position.x
+                        tag_info.z = closest_detection.pose.pose.pose.position.y
+                        tag_info.x = closest_detection.pose.pose.pose.position.z
+                        tag_info.angle = np.rad2deg(0)
+                        # rospy.loginfo(f"Tag ID: {tag_id}, {tag_info.x,tag_info.y,tag_info.z}")
+                        self.tag_info_pub.publish(tag_info)
                         camera_to_apriltag_transform = PyQuaternion(closest_detection.pose.pose.pose.orientation.w, closest_detection.pose.pose.pose.orientation.x, closest_detection.pose.pose.pose.orientation.y, closest_detection.pose.pose.pose.orientation.z)
                         waypoint_orientation = PyQuaternion(matching_waypoint['orientation'][3], matching_waypoint['orientation'][0], matching_waypoint['orientation'][1], matching_waypoint['orientation'][2])
                         yaw_sim = (waypoint_orientation * self.world_coords.inverse).yaw_pitch_roll[2]
