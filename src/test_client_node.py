@@ -22,7 +22,8 @@ if __name__ == "__main__":
     print_path(shortest_path)
 
     # Obstacle found! Update the map
-    curr_pos = DuckieNode(SETransform(x=3.2175, y=1.4625, theta=-1))
+    # curr_pos = DuckieNode(SETransform(x=3.2175, y=1.4625, theta=-1))
+    curr_pos = SETransform(x=3.2175, y=1.4625, theta=-1)
     faulty_node = DuckieNode(
         pose=SETransform(x=-1, y=-1, theta=-1), # Position does not matter, ID does
         tag_id=7
@@ -32,7 +33,8 @@ if __name__ == "__main__":
     print_path(shortest_path_updated)
 
     # # Oh no! Another obstacle found! Update the map again
-    # curr_pos = DuckieNode(SETransform(x=1.4, y=1.4, theta=-1))
+    # # curr_pos = DuckieNode(SETransform(x=1.4, y=1.4, theta=-1))
+    # curr_pos = SETransform(x=1.4, y=1.4, theta=-1)
     # faulty_node = DuckieNode(
     #     pose=SETransform(x=-1, y=-1, theta=-1), # Position does not matter, ID does
     #     tag_id=5
