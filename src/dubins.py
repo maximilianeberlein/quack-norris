@@ -83,6 +83,11 @@ class DubinsNode:
         self.past_poses = []
         self.corner = None
         rospy.on_shutdown(self.shutdown_duckie)
+
+        # self.xerr = [0, 0, 0]       # [p, i, d]
+        # self.yerr = [0, 0, 0]       # [p, i, d]
+        self.poserr = [0, 0, 0]     # [p, i, d]
+        self.thetaerr = [0, 0, 0]   # [p, i, d]
     def odom_callback(self, msg):
         self.se_pose.x = msg.pose.pose.position.x
         self.se_pose.y = msg.pose.pose.position.y
@@ -316,25 +321,61 @@ class DubinsNode:
 
         lookahead_point = path[lookahead_index]
 
-        # Calculate the steering angle
-        gain = 1 #speed /np.clip(self.speed,0.001,10)
-        gain = np.clip(gain, 0.5, 5)
-        angle_delta = lookahead_point[2] - self.se_pose.theta
-        angle_gain = np.abs(angle_delta)*1.5+1
-        angle_gain = np.clip(angle_gain, 1, 2)
-        alpha = np.arctan2(lookahead_point[1] - self.se_pose.y, lookahead_point[0] - self.se_pose.x) - self.se_pose.theta
-        steering_angle = np.arctan2(2 * wheelbase * np.sin(alpha), lookahead_distance)
-        rospy.loginfo(f"Steering angle: {steering_angle},angle delta {angle_delta} ,also angle gain {angle_gain}")
+        # # Calculate the steering angle
+        # gain = 1 #speed /np.clip(self.speed,0.001,10)
+        # gain = np.clip(gain, 0.5, 5)
+        # angle_delta = lookahead_point[2] - self.se_pose.theta
+        # angle_gain = np.abs(angle_delta)*1.5+1
+        # angle_gain = np.clip(angle_gain, 1, 2)
+        # alpha = np.arctan2(lookahead_point[1] - self.se_pose.y, lookahead_point[0] - self.se_pose.x) - self.se_pose.theta
+        # steering_angle = np.arctan2(2 * wheelbase * np.sin(alpha), lookahead_distance)
+        # rospy.loginfo(f"Steering angle: {steering_angle},angle delta {angle_delta} ,also angle gain {angle_gain}")
         
-        desired_angular_speed = lookahead_point[3] 
-        self.desired_angular_speed.publish(Float32(desired_angular_speed))
-        rospy.loginfo(f"Desired angular speed: {desired_angular_speed}")
-        # Calculate the left and right wheel speeds
+        # desired_angular_speed = lookahead_point[3] 
+        # self.desired_angular_speed.publish(Float32(desired_angular_speed))
+        # rospy.loginfo(f"Desired angular speed: {desired_angular_speed}")
+        # # Calculate the left and right wheel speeds
 
         
         
-        l_speed = (speed - (steering_angle * wheelbase/2)) 
-        r_speed = (speed + (steering_angle * wheelbase/2))
+        # l_speed = (speed - (steering_angle * wheelbase/2)) 
+        # r_speed = (speed + (steering_angle * wheelbase/2))
+
+        # Difference between the robot and the lookahead point
+        lookahead_step = 10
+        lookahead_index = closest_index + lookahead_step
+        if lookahead_index >= len(path):
+            lookahead_index = len(path) - 1
+        lookahead_point = path[lookahead_index]
+
+        dx = lookahead_point[0] - self.se_pose.x
+        dy = lookahead_point[1] - self.se_pose.y
+        dpos = np.sqrt(dx**2 + dy**2)
+        dtheta = lookahead_point[2] - self.se_pose.theta
+
+        # self.xerr = [dx, self.xerr[1] + dx, dx - self.xerr[0]]
+        # self.yerr = [dy, self.yerr[1] + dy, dy - self.yerr[0]]
+        self.poserr = [dpos, self.poserr[1] + dpos, dpos - self.poserr[0]]
+        self.thetaerr = [dtheta, self.thetaerr[1] + dtheta, dtheta - self.thetaerr[0]]
+
+        # PID control
+        ## Position control
+        pos_Kp = 0.05 # 0.5
+        pos_Ki = 0 # 0.01
+        pos_Kd = 0 #0.1
+
+        ## Heading control
+        ang_Kp = 0.5
+        ang_Ki = 0
+        ang_Kd = 0
+
+        # l_speed = speed + Kp * dtheta + Ki * self.thetaerr[1] + Kd * self.thetaerr[2]
+        # r_speed = speed - Kp * dtheta - Ki * self.thetaerr[1] - Kd * self.thetaerr[2]
+
+        speed += pos_Kp * dpos + pos_Ki * self.poserr[1] + pos_Kd * self.poserr[2]
+        d_angle = ang_Kp * dtheta + ang_Ki * self.thetaerr[1] + ang_Kd * self.thetaerr[2]
+        l_speed = speed - d_angle
+        r_speed = speed + d_angle
 
         return l_speed, r_speed
     def complete_heading_correction(self,target_angle: float):
@@ -461,12 +502,14 @@ class DubinsNode:
                 self.running_dubs = True
                 self.do_dubins = False
             elif not self.do_dubins and not self.running_dubs:
-                self.duckie_path =  [DuckieSegment(self.se_pose, lookahead_point, 0, 'STRAIGHT',sg.LineString([(self.se_pose.x,self.se_pose.y), (lookahead_point.x, lookahead_point.y)]),cost = 1,speed = self.speed)]
+                self.duckie_path =  [DuckieSegment(self.se_pose, lookahead_point, 0, 'STRAIGHT', sg.LineString([(self.se_pose.x,self.se_pose.y), (lookahead_point.x, lookahead_point.y)]),cost = 1,speed = self.speed)]
                 self.publish_path_markers()
                 temp_path_array= np.empty((0,5))
                 for segment in self.duckie_path:
+                    rospy.logwarn(f"Segment end: ({segment.end.x},{segment.end.y})")
                     partial = segment.get_path_array()
                     temp_path_array = np.vstack((temp_path_array, partial))
+                rospy.loginfo(f"Path array: {temp_path_array}")
                 self.pursuit_path = temp_path_array
 
             l_speed, r_speed =self.pure_pursuit_control(self.pursuit_path, 0.04, 0.102, self.speed)

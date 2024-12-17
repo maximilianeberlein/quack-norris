@@ -6,12 +6,19 @@ import numpy as np
 from apriltag_ros.msg import AprilTagDetectionArray
 from sensor_msgs.msg import CompressedImage, Image, CameraInfo
 from geometry_msgs.msg import PoseStamped
-from duckietown_msgs.msg import WheelsCmdStamped
+from duckietown_msgs.msg import WheelsCmdStamped, BoolStamped
 from std_msgs.msg import Int32MultiArray
 from cv_bridge import CvBridge
 import os
 import yaml
 import message_filters
+import tf
+
+from nav_msgs.msg import Odometry
+from geometry_msgs.msg import Quaternion, TransformStamped, Point
+from tf.transformations import quaternion_from_euler
+
+TILE_SIZE = 0.585
 
 class MainNode:
     def __init__(self):
@@ -27,14 +34,16 @@ class MainNode:
         self.map1 = None
         self.map2 = None
 
-        self.forward_speed = self.drive_conroller_config['drive_params']['forward_speed']
-        self.radius = self.drive_conroller_config['drive_params']['radius']
+        self.forward_speed = self.drive_conroller_config['drive_params']['max_speed']
+        # self.radius = self.drive_conroller_config['drive_params']['radius']
         self.wheel_distance = self.drive_conroller_config['drive_params']['wheel_distance']
         
         # Subscribers
         image_sub = message_filters.Subscriber(f'/{self.bot_name}/camera_node/image/compressed', CompressedImage)
         calib_sub = message_filters.Subscriber(f'/{self.bot_name}/camera_node/camera_info', CameraInfo)
         self.tag_sub = rospy.Subscriber('/tag_detections', AprilTagDetectionArray, self.tag_callback)
+        self.odom_sub = rospy.Subscriber('/wheel_encoder/odom', Odometry, self.odom_callback)
+
 
         # Synchronize the image and camera info messages
         ts = message_filters.ApproximateTimeSynchronizer([image_sub, calib_sub], queue_size=10, slop=0.1, )
@@ -45,13 +54,30 @@ class MainNode:
         self.rect_pub = rospy.Publisher(f'/{self.bot_name}/camera_node/rect/image_rect', Image, queue_size=1)
         self.rect_info_pub = rospy.Publisher(f'/{self.bot_name}/camera_node/rect/camera_info', CameraInfo, queue_size=1)
         self.tag_ids_pub = rospy.Publisher(f'/{self.bot_name}/detected_tags', Int32MultiArray, queue_size=10)
+        self.line_follow_pub = rospy.Publisher(f"/{self.bot_name}/joy_mapper_node/joystick_override", BoolStamped, queue_size=1)
 
         # Define the wheel command message
         self.wheel_cmd = WheelsCmdStamped()
 
+        # NEW
+        self.rate = rospy.Rate(10)
+        self.tag_detected = False
+        EMERGENY_LEVEL = 1 # In [0.6, 1] - 0 is no emergency (no speed), 1 is highest emergency (max speed)
+        self.desired_speed = EMERGENY_LEVEL * self.forward_speed
+        self.desired_radius = self.speed_to_radius(self.desired_speed) # In range [0.585, 0.8775], depening on the urgency
+        self.desired_distance = self.desired_radius + TILE_SIZE / 4
+        self.desired_direction = -1 # -1 for left, 1 for right # TODO: Make this dynamic
+
+        self.posx = 0
+        self.posy = 0
+        self.theta = 0
+
         rospy.on_shutdown(self.shutdown_duckie)
 
         rospy.loginfo("AprilTag Detector Node initialized.")
+
+    def speed_to_radius(self, speed):
+        return (5 * TILE_SIZE * speed) /(4 * self.forward_speed)
 
     def calib_callback(self, msg):
         if self.camera_matrix is None:
@@ -90,35 +116,39 @@ class MainNode:
 
     def tag_callback(self, msg):
         try:
-                
+            closest_detection = None
+            min_distance = float('inf')
             for detection in msg.detections:
-                tag_id = detection.id[0]
-                rospy.loginfo(f"Detected tag ID: {tag_id}")
+                position = detection.pose.pose.pose.position
+                position_array = np.array([position.x, position.y, position.z])
+                distance = np.linalg.norm(position_array)
                 
-                if tag_id == 20:
-                    self.stop_robot()
-                    return
-                
-                # if tag_id == 58:
-                #     self.drive_backward()
-                #     return    
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_detection = detection
 
-                # if tag_id in self.apriltag_data:
-                #     tag_data = self.apriltag_data[tag_id]
-                #     rospy.loginfo(f"Detected tag ID: {tag_id}, Name: {tag_data[0]}, Position: {tag_data[1]}, Orientation: {tag_data[2]}")
-                #     # self.tag_ids_pub.publish(Int32MultiArray(data=[tag_id]))
-                #     if tag_data[0] == 'Stop':
-                #         self.stop_robot()
-                #     # elif tag_data[1] == 'forward':
-                #     #     self.drive_forward()
-                #     elif tag_data[0] == 'Backward':
-                #         self.drive_backward()
+            if closest_detection:
+                # TODO: Just choose closest tag or similar
+                # rospy.loginfo(f"Detected tag with ID: {detection.id[0]}")
+                distance = closest_detection.pose.pose.pose.position.z # TODO: Make better
+                if not distance < self.desired_distance:
+                    # rospy.loginfo(f"Distance to tag: {distance}")
+                    return
+                # Out of range
+                # if distance > 0.8775: 
                 #     return
-                # else:
-                #     rospy.logerr(f"Tag ID {tag_id} not found in the 'apriltag_data' config file.")
-        
-            # If no tag with ID 20 or 58 is detected, drive forward
-            #self.drive_forward()
+                rospy.loginfo(f"Close enough to tag: {distance}")
+                
+                
+                # # TODO: Instead of if-statements, make curve radius depending on the urgency (resp. speed)
+                # if distance <= 0.585: # Small curve range
+                #     self.desired_radius = distance
+                # elif distance <= 0.73125: # Medium curve range
+                #     pass
+                # else: # Big curve range
+                #     pass
+                self.tag_detected = True
+                    
         except Exception as e:
             rospy.logerr(f"Error in image_callback: {e}")
     
@@ -144,29 +174,95 @@ class MainNode:
     def load_yaml_file(self, file_path):
         with open(file_path, 'r') as file:
             return yaml.safe_load(file)
+        
+    def odom_callback(self, msg):
+        self.posx = msg.pose.pose.position.x
+        self.posy = msg.pose.pose.position.y
+        # Orientation handling is just an approximation:
+        # Assuming small rotations around z. Adjust if you have quaternions:
+        # Convert quaternion to yaw if needed:
+        q = msg.pose.pose.orientation
+        # Simple approximation since you're only using z (Not accurate for all orientations)
+        # Better: use tf.transformations.euler_from_quaternion
+        _, _, yaw = tf.transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
+        # self.theta = self.normalize_angle(yaw)
+        self.theta = yaw
+
+    def normalize_angle(self, angle):
+        # Normalize angle to [-pi, pi]
+        return (angle + np.pi) % (2 * np.pi) - np.pi
 
     def drive_forward(self):
-        self.wheel_cmd.vel_left = self.forward_speed 
-        self.wheel_cmd.vel_right = self.forward_speed
-        self.pub_wheels.publish(self.wheel_cmd)
-    
-    def stop_robot(self):
-        self.wheel_cmd.vel_left = 0
-        self.wheel_cmd.vel_right = 0
+        self.wheel_cmd.vel_left = self.desired_speed 
+        self.wheel_cmd.vel_right = self.desired_speed
         self.pub_wheels.publish(self.wheel_cmd)
 
-    def drive_backward(self):
-        self.wheel_cmd.vel_left = -self.forward_speed #* (1 - self.wheel_distance / (2 * self.radius))
-        self.wheel_cmd.vel_right = -self.forward_speed  #* (1 + self.wheel_distance / (2 * self.radius))
+    def drive_curve(self):
+        self.line_follow_pub.publish(BoolStamped(data=True))
+        self.stop_robot(2)
+
+        init_theta = self.theta
+        rospy.logwarn(f"Init theta: {init_theta}")
+
+        rospy.logwarn("Driving curve")
+        radius = self.desired_radius / 2.2 # Needed bc of duckiebot bad wheels
+        # rospy.loginfo(f"Radius: {radius}")
+        gain_wheeldiff = 2.0
+        self.wheel_cmd.vel_left = self.desired_speed * (1 + gain_wheeldiff * np.sign(self.desired_direction) * self.wheel_distance / (2 * radius))
+        self.wheel_cmd.vel_right = self.desired_speed * (1 - gain_wheeldiff * np.sign(self.desired_direction) * self.wheel_distance / (2 * radius))
+        # rospy.loginfo(f"Left: {self.wheel_cmd.vel_left}, Right: {self.wheel_cmd.vel_right}")
         self.pub_wheels.publish(self.wheel_cmd)
+        # duration = (np.pi * self.desired_radius)/(self.desired_speed)
+        # rospy.sleep(duration)
+        # while self.normalize_angle(self.theta) < self.normalize_angle(init_theta + np.pi/2): # TODO: Curve type
+        if -np.pi < self.normalize_angle(init_theta + np.pi/2) < -np.pi/2:
+            check_theta = self.theta - 2*np.pi
+        else:
+            check_theta = self.theta
+        while check_theta < self.normalize_angle(init_theta + np.pi/2): # TODO: Curve type
+            rospy.logwarn(f"check_theta: {check_theta}, self.theta: {check_theta}. Desired: {self.normalize_angle(init_theta + np.pi/2)}")
+
+            if -np.pi < self.normalize_angle(init_theta + np.pi/2) < -np.pi/2:
+                check_theta = self.theta - 2*np.pi
+            else:
+                check_theta = self.theta
+            rospy.sleep(0.1)
+        rospy.logwarn("Stopping curve")
+        self.tag_detected = False
+
+        self.stop_robot()
+        self.line_follow_pub.publish(BoolStamped(data=False))
+    
+    def stop_robot(self, stop_time: float = 1):
+        # self.wheel_cmd.vel_left = 0
+        # self.wheel_cmd.vel_right = 0
+        # self.pub_wheels.publish(self.wheel_cmd)
+        self.pub_wheels.publish(WheelsCmdStamped())
+        rospy.sleep(stop_time)
+
+    # def drive_backward(self):
+    #     self.wheel_cmd.vel_left = -self.forward_speed #* (1 - self.wheel_distance / (2 * self.radius))
+    #     self.wheel_cmd.vel_right = -self.forward_speed  #* (1 + self.wheel_distance / (2 * self.radius))
+    #     self.pub_wheels.publish(self.wheel_cmd)
 
     def shutdown_duckie(self):
         rospy.loginfo("Shutting down... stopping the robot.")
-        self.pub_wheels.publish(WheelsCmdStamped())
-        rospy.sleep(1)  # Allow time for the message to propagate
+        self.line_follow_pub.publish(BoolStamped(data=True))
+        rospy.sleep(1)
+        self.stop_robot()
+        # self.pub_wheels.publish(WheelsCmdStamped())
+        # rospy.sleep(1)  # Allow time for the message to propagate
     
     def run(self):
-        rospy.spin()
+        self.line_follow_pub.publish(BoolStamped(data=False))
+        while not rospy.is_shutdown():
+            rospy.loginfo("Running...")
+            if self.tag_detected:
+                self.drive_curve()
+            else:
+                self.drive_forward()
+            self.rate.sleep()
+        # rospy.spin()
 
 if __name__ == '__main__':
     try:
