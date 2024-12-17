@@ -21,7 +21,7 @@ class MapServiceNode:
         self.path:  List[MapNode]   = []  # Saves last saved path. Used to remove path with obstacles
 
         # Init
-        self.csv_file   = rospy.get_param('~map_csvfile', '/code/catkin_ws/src/user_code/quack-norris/params/csv/main_map.csv')
+        self.csv_file   = rospy.get_param('~map_csvfile', '/code/catkin_ws/src/user_code/quack-norris/params/csv/oval_map.csv')
         self.service    = rospy.Service("map_service", Map, self.handle_request)
         rospy.loginfo("Map service ready.")
 

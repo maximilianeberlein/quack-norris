@@ -39,6 +39,8 @@
         <param name="tag_debug" type="bool" value="false" />
     </node>
 
+    <node pkg="quack_norris" type="map_service_node.py" name="map_service" output="screen" />
+
     <!-- <group if="$(arg visualize)">
         <include file="$(find quack_norris)/launch/rviz.launch"/>
     </group> -->

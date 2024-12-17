@@ -18,7 +18,11 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Quaternion, TransformStamped, Point
 from tf.transformations import quaternion_from_euler
 
-TILE_SIZE = 0.585
+from quack_norris_utils.utils import SETransform, DuckieCorner, DuckieNode # type: ignore
+from quack_norris_utils.utils import initialize_map, update_map # calculate_shortest_path # type: ignore
+from quack_norris_utils.utils import TILE_DATA
+
+TILE_SIZE = TILE_DATA['TILE_SIZE']
 
 class MainNode:
     def __init__(self):
@@ -62,22 +66,43 @@ class MainNode:
         # NEW
         self.rate = rospy.Rate(10)
         self.tag_detected = False
-        EMERGENY_LEVEL = 1 # In [0.6, 1] - 0 is no emergency (no speed), 1 is highest emergency (max speed)
-        self.desired_speed = EMERGENY_LEVEL * self.forward_speed
-        self.desired_radius = self.speed_to_radius(self.desired_speed) # In range [0.585, 0.8775], depening on the urgency
-        self.desired_distance = self.desired_radius + TILE_SIZE / 4
-        self.desired_direction = -1 # -1 for left, 1 for right # TODO: Make this dynamic
+        self.EMERGENY_LEVEL = 0.6 # In [0.6, 1] - 0 is no emergency (no speed), 1 is highest emergency (max speed)
+        if self.EMERGENY_LEVEL < 0.6:
+            rospy.logerr("Emergency level must be at least 0.6")
+            rospy.signal_shutdown("Emergency level must be at least 0.6")
+        self.desired_speed = self.EMERGENY_LEVEL * self.forward_speed
+        self.desired_radius = self.speed_to_radius(self.EMERGENY_LEVEL) # In range [0.585, 0.8775], depening on the urgency
+        # self.desired_distance = self.desired_radius + TILE_SIZE / 4
+        # self.desired_direction = -1 # -1 for left, 1 for right # TODO: Make this dynamic
 
         self.posx = 0
         self.posy = 0
         self.theta = 0
 
+        self.start_node = DuckieNode(
+            pose=SETransform(x=-1, y=-1, theta=-1), # Position does not matter, ID does
+            tag_id=74 # 58
+        )
+        self.end_node = DuckieNode(
+            pose=SETransform(x=-1, y=-1, theta=-1), # Position does not matter, ID does
+            tag_id=20 # 2
+        )
+        self.shortest_path = initialize_map(self.start_node, self.end_node)
+        if self.shortest_path:
+            self.shortest_path.pop(0) # Remove start node
+        else:
+            rospy.logerr("No path found!")
+            rospy.signal_shutdown("No path found!")
+
         rospy.on_shutdown(self.shutdown_duckie)
 
         rospy.loginfo("AprilTag Detector Node initialized.")
 
-    def speed_to_radius(self, speed):
-        return (5 * TILE_SIZE * speed) /(4 * self.forward_speed)
+    def speed_to_radius(self, emergency_level):
+        return (5 * TILE_SIZE * emergency_level) / 4
+    
+    def speed_to_linestop_distance(self, emergency_level):
+        return TILE_SIZE / 2 * emergency_level # / 4
 
     def calib_callback(self, msg):
         if self.camera_matrix is None:
@@ -116,28 +141,35 @@ class MainNode:
 
     def tag_callback(self, msg):
         try:
+            # Do not detect while in corners
+            if self.tag_detected:
+                return
             closest_detection = None
-            min_distance = float('inf')
+            # min_distance = float('inf')
+            desired_id = self.shortest_path[0].tag_id
             for detection in msg.detections:
-                position = detection.pose.pose.pose.position
-                position_array = np.array([position.x, position.y, position.z])
-                distance = np.linalg.norm(position_array)
+                if detection.id[0] != desired_id:
+                    continue
+                closest_detection = detection
+                # position = detection.pose.pose.pose.position
+                # position_array = np.array([position.x, position.y, position.z])
+                # distance = np.linalg.norm(position_array)
                 
-                if distance < min_distance:
-                    min_distance = distance
-                    closest_detection = detection
+                # if distance < min_distance:
+                #     min_distance = distance
+                #     closest_detection = detection
 
             if closest_detection:
                 # TODO: Just choose closest tag or similar
-                # rospy.loginfo(f"Detected tag with ID: {detection.id[0]}")
+                rospy.loginfo(f"Detected tag with ID: {detection.id[0]}")
                 distance = closest_detection.pose.pose.pose.position.z # TODO: Make better
-                if not distance < self.desired_distance:
+                if not distance < (self.desired_radius + TILE_SIZE / 4) + self.speed_to_linestop_distance(self.EMERGENY_LEVEL):
                     # rospy.loginfo(f"Distance to tag: {distance}")
                     return
                 # Out of range
                 # if distance > 0.8775: 
                 #     return
-                rospy.loginfo(f"Close enough to tag: {distance}")
+                # rospy.loginfo(f"Close enough to tag: {distance}")
                 
                 
                 # # TODO: Instead of if-statements, make curve radius depending on the urgency (resp. speed)
@@ -148,6 +180,7 @@ class MainNode:
                 # else: # Big curve range
                 #     pass
                 self.tag_detected = True
+                return
                     
         except Exception as e:
             rospy.logerr(f"Error in image_callback: {e}")
@@ -199,34 +232,63 @@ class MainNode:
 
     def drive_curve(self):
         self.line_follow_pub.publish(BoolStamped(data=True))
+        rospy.logwarn("Driving curve")
         self.stop_robot(2)
 
+        curr_node = self.shortest_path.pop(0)
+        desired_direction = curr_node.corner.type # -1 for left, 1 for right
+
         init_theta = self.theta
-        rospy.logwarn(f"Init theta: {init_theta}")
+        # rospy.logwarn(f"Init theta: {init_theta}")
 
         rospy.logwarn("Driving curve")
         radius = self.desired_radius / 2.2 # Needed bc of duckiebot bad wheels
         # rospy.loginfo(f"Radius: {radius}")
         gain_wheeldiff = 2.0
-        self.wheel_cmd.vel_left = self.desired_speed * (1 + gain_wheeldiff * np.sign(self.desired_direction) * self.wheel_distance / (2 * radius))
-        self.wheel_cmd.vel_right = self.desired_speed * (1 - gain_wheeldiff * np.sign(self.desired_direction) * self.wheel_distance / (2 * radius))
+        self.wheel_cmd.vel_left = self.desired_speed * (1 + gain_wheeldiff * np.sign(desired_direction) * self.wheel_distance / (2 * radius))
+        self.wheel_cmd.vel_right = self.desired_speed * (1 - gain_wheeldiff * np.sign(desired_direction) * self.wheel_distance / (2 * radius))
+        
         # rospy.loginfo(f"Left: {self.wheel_cmd.vel_left}, Right: {self.wheel_cmd.vel_right}")
         self.pub_wheels.publish(self.wheel_cmd)
         # duration = (np.pi * self.desired_radius)/(self.desired_speed)
         # rospy.sleep(duration)
         # while self.normalize_angle(self.theta) < self.normalize_angle(init_theta + np.pi/2): # TODO: Curve type
-        if -np.pi < self.normalize_angle(init_theta + np.pi/2) < -np.pi/2:
-            check_theta = self.theta - 2*np.pi
-        else:
-            check_theta = self.theta
-        while check_theta < self.normalize_angle(init_theta + np.pi/2): # TODO: Curve type
-            rospy.logwarn(f"check_theta: {check_theta}, self.theta: {check_theta}. Desired: {self.normalize_angle(init_theta + np.pi/2)}")
 
+        if desired_direction == -1:
             if -np.pi < self.normalize_angle(init_theta + np.pi/2) < -np.pi/2:
                 check_theta = self.theta - 2*np.pi
             else:
                 check_theta = self.theta
-            rospy.sleep(0.1)
+            while check_theta < self.normalize_angle(init_theta + np.pi/2): # TODO: Curve type
+                # rospy.logwarn(f"check_theta: {check_theta}, self.theta: {check_theta}. Desired: {self.normalize_angle(init_theta + np.pi/2)}")
+
+                if -np.pi < self.normalize_angle(init_theta + np.pi/2) < -np.pi/2:
+                    check_theta = self.theta - 2*np.pi
+                else:
+                    check_theta = self.theta
+                rospy.sleep(0.1)
+        elif desired_direction == 1:
+            if np.pi/2 < self.normalize_angle(init_theta - np.pi/2) < np.pi:
+                check_theta = self.theta + 2*np.pi
+            else:
+                check_theta = self.theta
+            while check_theta > self.normalize_angle(init_theta - np.pi/2):
+                # rospy.logwarn(f"check_theta: {check_theta}, self.theta: {check_theta}. Desired: {self.normalize_angle(init_theta - np.pi/2)}")
+
+                if np.pi/2 < self.normalize_angle(init_theta - np.pi/2) < np.pi:
+                    check_theta = self.theta + 2*np.pi
+                else:
+                    check_theta = self.theta
+                rospy.sleep(0.1)
+        else:
+            if len(self.shortest_path) == 0:
+                rospy.loginfo("Reached goal!")
+                rospy.signal_shutdown("Reached goal!")
+            else:
+                rospy.logerr("Some corner has type 0, but is not the goal. Exiting...")
+                rospy.signal_shutdown("Some corner has type 0, but is not the goal. Exiting...")
+
+
         rospy.logwarn("Stopping curve")
         self.tag_detected = False
 
@@ -255,8 +317,9 @@ class MainNode:
     
     def run(self):
         self.line_follow_pub.publish(BoolStamped(data=False))
+        self.stop_robot(2)
         while not rospy.is_shutdown():
-            rospy.loginfo("Running...")
+            # rospy.loginfo("Running...")
             if self.tag_detected:
                 self.drive_curve()
             else:
