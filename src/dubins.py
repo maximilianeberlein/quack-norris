@@ -5,7 +5,7 @@ import numpy as np
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Quaternion, TransformStamped, Point
 from tf.transformations import quaternion_from_euler
-from duckietown_msgs.msg import WheelEncoderStamped, WheelsCmdStamped
+from duckietown_msgs.msg import WheelEncoderStamped, WheelsCmdStamped, BoolStamped
 from std_msgs.msg import Float32, ColorRGBA
 from quack_norris.msg import TagInfo
 import shapely.geometry as sg
@@ -58,9 +58,9 @@ class DubinsNode:
         
         self.marker_pub = rospy.Publisher('/dubins_marker', Marker, queue_size=1)
         self.dubins_pub = rospy.Publisher('/dubins_path', Marker, queue_size=1)
-        self.desired_wheel_cmd_pub = rospy.Publisher(f'/{self.bot_name}/wheels_driver_node/wheels_cmd', WheelsCmdStamped, queue_size=1)
+        #self.desired_wheel_cmd_pub = rospy.Publisher(f'/{self.bot_name}/wheels_driver_node/wheels_cmd', WheelsCmdStamped, queue_size=1)
 
-        #self.desired_wheel_cmd_pub = rospy.Publisher(f'/{self.bot_name}/desired_wheel_speed', WheelsCmdStamped, queue_size=1)
+        self.desired_wheel_cmd_pub = rospy.Publisher(f'/{self.bot_name}/desired_wheel_speed', WheelsCmdStamped, queue_size=1)
         self.desired_angular_speed = rospy.Publisher(f'/{self.bot_name}/desired_angular_speed', Float32, queue_size=1)
         self.se_pose = SETransform(0,0,0)
         self.tag_info = None
@@ -109,7 +109,7 @@ class DubinsNode:
     def check_tag(self):
         if self.tag_info is not None:
             # rospy.loginfo(f"Tag {self.tag_info.tag_id} detected, looking for tag {self.next_node.tag_id}")
-            if self.next_node.tag_id == self.tag_info.tag_id and self.tag_distance < 1.5*a:
+            if self.next_node.tag_id == self.tag_info.tag_id and self.tag_distance < 3*a:
                 #rospy.loginfo(f"Tag {self.tag_info.tag_id} is present, we moving on brahh")
                 self.tag_present = True
             
@@ -296,26 +296,33 @@ class DubinsNode:
     
     def pure_pursuit_control(self, path, lookahead_distance, wheelbase, speed):
     # Extract the path points
-        x_path = path[:, 0]
-        y_path = path[:, 1]
-        theta_path = path[:, 2]
-
+        print(f'len {len(self.pursuit_path)}')
+        if self.pursuit_path is None:
+            return 0,0
+        x_path = self.pursuit_path[:, 0]
+        y_path = self.pursuit_path[:, 1]
+        theta_path = self.pursuit_path[:, 2]
+        
         # Find the closest point on the path
         distances = np.sqrt((x_path - self.se_pose.x)**2 + (y_path - self.se_pose.y)**2)
         closest_index = np.argmin(distances)
 
+
         # Find the lookahead point
         lookahead_index = closest_index
+        
         while lookahead_index < len(path) and distances[lookahead_index] < lookahead_distance:
             lookahead_index += 1
 
         if lookahead_index >= len(path):
             lookahead_index = len(path) - 1
 
-            rospy.loginfo("Reached the end of the path")
+            
 
         lookahead_point = path[lookahead_index]
-
+        print(f'closest point{lookahead_index}, x {lookahead_point}')
+        # self.pursuit_path = self.pursuit_path[lookahead_index:-1]
+        # self.pursuit_path= self.pursuit_path[lookahead_index:-1]
         # Calculate the steering angle
         gain = 1 #speed /np.clip(self.speed,0.001,10)
         gain = np.clip(gain, 0.5, 5)
@@ -323,18 +330,24 @@ class DubinsNode:
         angle_gain = np.abs(angle_delta)*1.5+1
         angle_gain = np.clip(angle_gain, 1, 2)
         alpha = np.arctan2(lookahead_point[1] - self.se_pose.y, lookahead_point[0] - self.se_pose.x) - self.se_pose.theta
+        # print(f'alpha {alpha}')
+        # if np.abs(alpha) > 1.5* np.pi/2:
+        #     rospy.loginfo("Reached the end of the path")
+        #     self.running_dubs = False
+        #     self.need_to_fix_angle = True
+        #     return 0,0 
         steering_angle = np.arctan2(2 * wheelbase * np.sin(alpha), lookahead_distance)
         rospy.loginfo(f"Steering angle: {steering_angle},angle delta {angle_delta} ,also angle gain {angle_gain}")
         
         desired_angular_speed = lookahead_point[3] 
         self.desired_angular_speed.publish(Float32(desired_angular_speed))
-        rospy.loginfo(f"Desired angular speed: {desired_angular_speed}")
         # Calculate the left and right wheel speeds
 
         
         
         l_speed = (speed - (steering_angle * wheelbase/2)) 
         r_speed = (speed + (steering_angle * wheelbase/2))
+        rospy.loginfo(f'l {l_speed},r {r_speed} ')
 
         return l_speed, r_speed
     def complete_heading_correction(self,target_angle: float):
@@ -361,21 +374,50 @@ class DubinsNode:
 
     def check_completion(self):
         dist_to_end = np.sqrt((self.se_pose.x - self.pursuit_path[-1,0])**2 + (self.se_pose.y - self.pursuit_path[-1,1])**2)
+
         angle_deviation = np.abs(self.se_pose.theta - self.pursuit_path[-1,2])
         # print(f"Distance to end: {dist_to_end}, Angle deviation: {angle_deviation}, target angle: {self.pursuit_path[-1,2]}")
         self.past_poses.append([self.se_pose.x, self.se_pose.y, self.se_pose.theta])
-        if dist_to_end <0.1:
-            wheels_cmd = WheelsCmdStamped()
-            wheels_cmd.header.stamp = rospy.Time.now()
-            wheels_cmd.vel_left = 0
-            wheels_cmd.vel_right = 0
-            self.desired_wheel_cmd_pub.publish(wheels_cmd)
+        
+        # if len(self.past_poses)>=2:
+        #     last_pose =self.past_poses[-2]
+        #     last_dist_to_end =  np.sqrt((last_pose[0] - self.pursuit_path[-1,0])**2 + (last_pose[1] - self.pursuit_path[-1,1])**2)
+        # else:
+        #     last_dist_to_end= dist_to_end + 1
+        #     length = len(self.past_poses)
+        #     latest_angle = self.past_poses[-1][2]
+        #     last_angle = self.past_poses[-2][2]
+        #     target_angle = self.pursuit_path[-1,2]
+        #     print(f'last {np.rad2deg(self.past_poses[-2][2])}, target {np.rad2deg(self.pursuit_path[-1,2])},latest {np.rad2deg(self.past_poses[-1][2])}')
+        #     if (latest_angle > last_angle and last_angle <= target_angle <= latest_angle) or \
+        #    (latest_angle < last_angle and (target_angle >= last_angle or target_angle <= latest_angle)):
+        
+        # if dist_to_end < 0.1 or (dist_to_end < 0.4 and last_dist_to_end<dist_to_end):       
+        #     wheels_cmd = WheelsCmdStamped()
+        #     wheels_cmd.header.stamp = rospy.Time.now()
+        #     wheels_cmd.vel_left = 0
+        #     wheels_cmd.vel_right = 0
+        #     self.desired_wheel_cmd_pub.publish(wheels_cmd)
 
             
-            self.running_dubs = False
-            self.need_to_fix_angle = True
-            self.plot_dubins(self.past_poses)
-            self.past_poses = []
+        #     self.running_dubs = False
+        #     self.need_to_fix_angle = True
+        #     # self.plot_dubins(self.past_poses)
+        #     self.past_poses = []
+        if self.tag_info is not None and self.running_dubs:
+            if self.tag_distance < 2*a and self.tag_info.tag_id is not self.next_node.parent.tag_id:
+                print(f'officially done {self.tag_distance,self.tag_info.tag_id,self.next_node.parent.tag_id}')
+                wheels_cmd = WheelsCmdStamped()
+                wheels_cmd.header.stamp = rospy.Time.now()
+                wheels_cmd.vel_left = 0
+                wheels_cmd.vel_right = 0
+                self.desired_wheel_cmd_pub.publish(wheels_cmd)
+
+                
+                self.running_dubs = False
+                self.need_to_fix_angle = True
+                # self.plot_dubins(self.past_poses)
+                self.past_poses = []
 
     def plot_dubins(self,past_poses):
         plt.clf()
@@ -404,8 +446,17 @@ class DubinsNode:
         rospy.loginfo("Shutting down... stopping the robot.")
         self.desired_wheel_cmd_pub.publish(WheelsCmdStamped())
         rospy.sleep(1)  # A   
+    def get_temp_line(self, pose, point):
+        x_coords = np.linspace(pose.x, point.x, 30)
+        y_coords = np.linspace(pose.y, point.y, 30)
+        
+        # Combine x and y coordinates into a list of tuples
+        points = list(zip(x_coords, y_coords))
+        
+        # Create a LineString from the points
+        return sg.LineString(points)
     def run(self):
-        rate = rospy.Rate(10)
+        rate = rospy.Rate(20)
         #init by popping the first node 
         self.next_node = self.path.pop(0)
         rospy.wait_for_message('/wheel_encoder/odom', Odometry)
@@ -415,15 +466,19 @@ class DubinsNode:
 
             self.get_node_lookahead()
             self.check_tag()
+            if self.tag_info is not None:
+                print(f'tag {self.tag_present}, target id {self.next_node.tag_id}, observed id {self.tag_info.tag_id}')
 
             # If the next_node is in scope and the tag matches, move on to the next node
             if self.node_in_scope and self.tag_present:
                 rospy.loginfo(f"Moving to next node")
+                
                 self.corner = self.next_node.corner
                 self.next_node = self.next_node.next
                 self.do_dubins = True
                 self.node_in_scope = False
                 self.tag_present = False
+                self.tag_info = None
                 self.get_line()  # Update line for new node
                 
 
@@ -433,21 +488,20 @@ class DubinsNode:
 
             lookahead_point = self.get_line_lookahead()
             if lookahead_point and self.do_dubins and not self.running_dubs:
-                wheels_cmd = WheelsCmdStamped()
-                wheels_cmd.header.stamp = rospy.Time.now()
-                wheels_cmd.vel_left = 0
-                wheels_cmd.vel_right =0
-                self.desired_wheel_cmd_pub.publish(wheels_cmd)
-                rospy.sleep(1)
 
+                goal_pose = self.next_node.pose
+                
+                self.desired_wheel_cmd_pub.publish(WheelsCmdStamped())
+                rospy.sleep(2)
                 # rospy.loginfo(f"Lookahead Point: x={lookahead_point.x}, y={lookahead_point.y}")
-                dub = dubins(self.se_pose,lookahead_point,3,0.3,0.2,0.2)
+                dub = dubins(self.se_pose,goal_pose,3,self.speed,0.2,0.2)
                 self.duckie_path = dub.solve()
                 if self.check_collision([self.corner.shapely_obs],self.duckie_path):
-                    rospy.loginfo("Collision detected, recalculating path")
+                    rospy.loginfo(f"Collision detected, recalculating path,goal pose{goal_pose.x,goal_pose.y}")
+                    
                     dub1 =  dubins(self.se_pose,self.corner.placement,3,self.speed,0.2,self.corner.radius)
                     path1 = dub1.solve()
-                    dub2 = dubins(self.corner.placement,lookahead_point,3,self.speed,self.corner.radius,0.2)
+                    dub2 = dubins(self.corner.placement,goal_pose,3,self.speed,self.corner.radius,0.2)
                     path2= dub2.solve()
                     self.duckie_path = np.concatenate((path1,path2)) 
                     print(self.duckie_path)
@@ -461,7 +515,9 @@ class DubinsNode:
                 self.running_dubs = True
                 self.do_dubins = False
             elif not self.do_dubins and not self.running_dubs:
-                self.duckie_path =  [DuckieSegment(self.se_pose, lookahead_point, 0, 'STRAIGHT',sg.LineString([(self.se_pose.x,self.se_pose.y), (lookahead_point.x, lookahead_point.y)]),cost = 1,speed = self.speed)]
+                rospy.loginfo(f'only lane following')
+                temp_line = self.get_temp_line(self.se_pose, lookahead_point)
+                self.duckie_path =  [DuckieSegment(self.se_pose, lookahead_point, 0, 'STRAIGHT',temp_line,cost = 1,speed = self.speed)]
                 self.publish_path_markers()
                 temp_path_array= np.empty((0,5))
                 for segment in self.duckie_path:
@@ -469,24 +525,25 @@ class DubinsNode:
                     temp_path_array = np.vstack((temp_path_array, partial))
                 self.pursuit_path = temp_path_array
 
-            l_speed, r_speed =self.pure_pursuit_control(self.pursuit_path, 0.04, 0.102, self.speed)
+
+            if self.running_dubs:
+                rospy.loginfo(f"doiiing the stuuf")
+
+            l_speed, r_speed =self.pure_pursuit_control(self.pursuit_path, 0.1, 0.102, self.speed)
 
             wheels_cmd = WheelsCmdStamped()
             wheels_cmd.header.stamp = rospy.Time.now()
             wheels_cmd.vel_left = l_speed / self.v_max
             wheels_cmd.vel_right = r_speed / self.v_max
-            rospy.loginfo(f"Left speed: {l_speed}, Right speed: {r_speed}")
+            # rospy.loginfo(f"Left speed: {l_speed}, Right speed: {r_speed}")
             self.desired_wheel_cmd_pub.publish(wheels_cmd)
-            # if self.running_dubs:
-            #     rospy.loginfo(f"Left speed: {l_speed}, Right speed: {r_speed} doiiing the stuuf")
-            # else:
-            #     rospy.loginfo(f"Left speed: {l_speed}, Right speed: {r_speed} going straight")
             self.check_completion()
             while self.need_to_fix_angle:
                 rospy.loginfo(f"Fixing angle deviation target angle: {np.rad2deg(self.pursuit_path[-1,2])} and current angle: {np.rad2deg(self.se_pose.theta)}")
                 
                 self.complete_heading_correction(self.pursuit_path[-1,2])
-            rospy.sleep(1)
+                rate.sleep()
+                
 
             # Publish markers for visualization
             self.publish_markers(lookahead_point)
