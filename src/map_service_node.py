@@ -122,15 +122,15 @@ class MapServiceNode:
                     # Remove apparent neighbours that previously were not neighbours, thus can't be neighbours now
                     if neighbour not in ([next_node.neighbors, next_node.center_index]) and neighbour not in ([faulty_node.neighbors, faulty_node.center_index]):
                         neighbour_positions.pop(index)
-                rospy.logwarn(f"New node neighbors: {neighbour_positions}")
+                # rospy.logwarn(f"New node neighbors: {neighbour_positions}")
                 for neighbour_position in neighbour_positions:
                     neighbour_index = self.get_index_via_pos(neighbour_position)
                     if neighbour_index is not None:
                         neighbour = self.nodes[neighbour_index]
-                        rospy.logwarn(f"Neighbor exists")
+                        # rospy.logwarn(f"Neighbor exists")
                         if neighbour.apriltag_id != next_faulty_node.apriltag_id:
                             start_node.neighbors.append(neighbour)
-                            rospy.logwarn(f"Added neighbor {neighbour} to new node {start_node}")
+                            # rospy.logwarn(f"Added neighbor {neighbour} to new node {start_node}")
                 updated_node_isnew = True
             else:
                 start_node = self.nodes[self.get_index_via_pos((x_ind, y_ind))]
