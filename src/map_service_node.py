@@ -3,12 +3,12 @@
 import rospy
 import csv
 import numpy as np
-import random
 
 from quack_norris.srv import Map, MapResponse   # type: ignore
 
-from quack_norris_utils.utils import find_closest_points, plot_solved_graph, tile_pos_to_index, plot_solved_graph_with_progress   # type: ignore
-from quack_norris_utils.utils import fill_path_corners, MapNode   # type: ignore
+from quack_norris_utils.utils import find_closest_points, tile_pos_to_index # type: ignore
+from quack_norris_utils.utils import fill_path_corners, MapNode # type: ignore
+from quack_norris_utils.utils import plot_solved_graph, plot_solved_graph_with_progress # type: ignore
 
 from typing import List, Dict, Tuple, Optional
 
