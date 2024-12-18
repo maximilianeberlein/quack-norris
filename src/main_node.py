@@ -108,6 +108,13 @@ class MainNode:
 
         rospy.loginfo("Configuration parameters loaded.")
 
+        self.obstacle_data = {}
+
+    # Extract obstacles and save to the dictionary
+        for tag in data.get('obstacle_tags', []):
+            self.obstacle_data[tag['id']] = [tag['name'], tag['speed']]
+        
+
     def load_yaml_file(self, file_path):
         with open(file_path, 'r') as file:
             return yaml.safe_load(file)
