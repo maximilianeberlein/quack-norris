@@ -7,7 +7,7 @@ import random
 
 from quack_norris.srv import Map, MapResponse   # type: ignore
 
-from quack_norris_utils.utils import find_closest_points, plot_solved_graph, tile_pos_to_index   # type: ignore
+from quack_norris_utils.utils import find_closest_points, plot_solved_graph, tile_pos_to_index, plot_solved_graph_with_progress   # type: ignore
 from quack_norris_utils.utils import fill_path_corners, MapNode   # type: ignore
 
 from typing import List, Dict, Tuple, Optional
@@ -20,7 +20,8 @@ class MapServiceNode:
         self.path:  List[MapNode]   = []  # Saves last saved path. Used to remove path with obstacles
 
         # Init
-        self.csv_file   = rospy.get_param('~map_csvfile', '/code/catkin_ws/src/user_code/quack-norris/params/csv/main_map.csv')
+        self.map_name   = rospy.get_param('~map_name', 'main_map')
+        self.csv_file   = f'/code/catkin_ws/src/user_code/quack-norris/params/csv/{self.map_name}.csv'
         self.service    = rospy.Service("map_service", Map, self.handle_request)
         rospy.loginfo("Map service ready.")
 
@@ -143,7 +144,8 @@ class MapServiceNode:
 
         if shortest_path is not None:
             self.path = shortest_path
-            # plot_solved_graph(self.nodes, shortest_path, f"/home/duckie/repos/quack-norris/src/solved_graph{random.randint(0, 1000)}.png")
+            # plot_solved_graph(self.nodes, shortest_path, f"/home/duckie/repos/quack-norris/src/solved_graph{rospy.get_time()}.png", self.map_name)
+            # plot_solved_graph_with_progress(self.nodes, shortest_path, f"/home/duckie/repos/quack-norris/src/solved_graph_with_progress{rospy.get_time()}.png", self.map_name)
             full_path = fill_path_corners(shortest_path)
             if not req.reset and updated_node_isnew:
                 # Remove new node from nodes
