@@ -1,0 +1,11 @@
+# Request
+bool reset
+Node start_node # Or faulty node
+Node goal_node  # Or None if update instead of init
+
+---
+# Response
+bool success    # Status of the operation
+string message  # Feedback message
+
+Node[] nodes
