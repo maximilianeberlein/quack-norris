@@ -65,7 +65,7 @@ class DubinsNode:
 
         self.desired_wheel_cmd_pub = rospy.Publisher(f'/{self.bot_name}/desired_wheel_speed', WheelsCmdStamped, queue_size=1)
         self.desired_angular_speed = rospy.Publisher(f'/{self.bot_name}/desired_angular_speed', Float32, queue_size=1)
-
+        self.path = hardcoded_path
         #agressive slider 
         self.base_corner_radius = 3*a
 
@@ -74,7 +74,7 @@ class DubinsNode:
 
         self.tag_info = None
         self.tag_distance = 10
-        self.path = hardcoded_path
+        
         self.node_lookahead = 6*a
         self.waypoint_lookahead = 8.5*a
         self.next_node = None
@@ -99,7 +99,7 @@ class DubinsNode:
         rospy.loginfo(f"Dynamic Reconfigure: Aggressiveness set to {self.aggressiveness}")
         new_radius = self.base_corner_radius - self.aggressiveness * a/2 
         # Update the corners based on the new aggressiveness
-        for p in hardcoded_path:
+        for p in self.path:
             p.corner.update_corners(new_radius)
         return config
     
@@ -502,7 +502,9 @@ class DubinsNode:
             if self.node_in_scope and self.tag_present:
                 rospy.loginfo(f"Moving to next node")
                 self.corner = self.next_node.corner
-                self.next_node = self.next_node.next
+                self.next_node = self.path.pop(0)#self.next_node.next
+                if self.path == []:
+                    self.path = hardcoded_path
                 self.do_dubins = True
                 self.node_in_scope = False
                 self.tag_present = False
@@ -553,7 +555,8 @@ class DubinsNode:
                     temp_path_array = np.vstack((temp_path_array, partial))
                 self.pursuit_path = temp_path_array
                 l_speed, r_speed =self.pure_pursuit_control(self.pursuit_path, 0.12, 0.102, self.speed)
-                
+                l_speed = 0
+                r_speed = 0
 
 
 
