@@ -1,7 +1,6 @@
 <launch>
     <!-- Arguments -->
     <!-- Run rviz and simulator. Launch with "visualize:=true" to enable-->
-    <arg name="visualize" default="false"/>
     <!-- <arg name="cam_frame" default="camera_frame" /> -->
     <arg name="yaml_file" default="/code/catkin_ws/src/user_code/quack-norris/params/apriltags.yaml" />
     <node pkg="quack_norris" type="globalpose_getter.py" name="globalpose_getter" output="screen">
@@ -39,9 +38,11 @@
         <param name="tag_debug" type="bool" value="false" />
     </node>
 
-    <group if="$(arg visualize)">
-        <include file="$(find quack_norris)/launch/rviz.launch"/>
-    </group>
+    <!-- Launch the global planner node -->
+    <node pkg="quack_norris" type="map_service_node.py" name="global_planner" output="screen">
+        <param name="yaml_file" value="$(arg yaml_file)"/>
+    </node>
+
 
     <node pkg="tf" type="static_transform_publisher" name="map_to_odom" args="0 0 0 0 0 0 map odom 100" />
 </launch>
