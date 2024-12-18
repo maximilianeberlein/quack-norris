@@ -10,12 +10,13 @@ from std_msgs.msg import Float32, ColorRGBA
 from quack_norris.msg import TagInfo
 import shapely.geometry as sg
 import matplotlib.pyplot as plt
+import yaml
 import tf
 from typing import List
 import os
 import numpy as np
 
-from quack_norris_utils.utils import dubins, SETransform, DuckieObstacle, DuckieNode, DuckieSegment, DuckieCorner
+from quack_norris_utils.utils import dubins, SETransform, DuckieObstacle, DuckieNode, DuckieSegment, DuckieCorner, DuckieDriverObstacle
 from visualization_msgs.msg import Marker
 
 from dynamic_reconfigure.server import Server
@@ -54,8 +55,17 @@ class DubinsNode:
         rospy.init_node('dubins_node')
 
         self.bot_name = os.environ.get("VEHICLE_NAME", "duckiebot")
+        self.yaml_file = rospy.get_param('~yaml_file', '/code/catkin_ws/src/user_code/quack-norris/params/apriltags.yaml')
+
         self.wheel_base = rospy.get_param('~wheel_base', 0.102)
+
+
+        self.obstacles = self.load_obstacle(self.yaml_file)
+        self.obstacle_dict = {obstacle['id']: obstacle for obstacle in self.obstacles}
+
+
         self.se_pose = SETransform(0,0,0)
+
         self.odom_sub = rospy.Subscriber('/wheel_encoder/odom', Odometry, self.odom_callback)
         self.tag_info_sub = rospy.Subscriber(f'/{self.bot_name}/tag_info', TagInfo, self.tag_info_callback, buff_size = 1)
         
@@ -81,6 +91,7 @@ class DubinsNode:
         self.node_in_scope = False
         self.tag_present = False
         self.line = None
+        self.lookahead_point =None
         self.line_theta = None
         self.duckie_path = None
         self.pursuit_path = None
@@ -91,6 +102,18 @@ class DubinsNode:
         self.need_to_fix_angle = False
         self.past_poses = []
         self.corner = None
+
+        self.obstacle_ids =[390,391]
+        self.obstacle= None
+        self.timer = np.float('inf')
+        self.obstacle_avoid = False
+
+        rospy.on_shutdown(self.shutdown_duckie)
+    def load_obstacle(self, yaml_file):
+        with open(yaml_file, 'r') as file:
+            data = yaml.safe_load(file)
+        return data['obstacle_tags']
+
         self.aggressiveness = 0
         rospy.on_shutdown(self.shutdown_duckie)
     def dyn_reconf_callback(self, config, level):
@@ -103,6 +126,7 @@ class DubinsNode:
             p.corner.update_corners(new_radius)
         return config
     
+
     def odom_callback(self, msg):
         self.se_pose.x = msg.pose.pose.position.x
         self.se_pose.y = msg.pose.pose.position.y
@@ -119,6 +143,7 @@ class DubinsNode:
         self.tag_info = msg
         self.tag_distance = np.sqrt(self.tag_info.x**2 + self.tag_info.y**2)
 
+
     def get_node_lookahead(self):
         if sg.Point(self.se_pose.x, self.se_pose.y).buffer(self.node_lookahead).contains(sg.Point(self.next_node.x, self.next_node.y)):
             # rospy.loginfo(f"Node at position{self.next_node.x,self.next_node.y} is in scope")
@@ -128,12 +153,23 @@ class DubinsNode:
 
     def check_tag(self):
         if self.tag_info is not None:
-            # rospy.loginfo(f"Tag {self.tag_info.tag_id} detected, looking for tag {self.next_node.tag_id}")
+            rospy.loginfo(f"Tag {self.tag_info.tag_id} detected")
             if self.next_node.tag_id == self.tag_info.tag_id and self.tag_distance < 5*a:
                 #rospy.loginfo(f"Tag {self.tag_info.tag_id} is present, we moving on brahh")
                 self.tag_present = True
+            elif self.tag_info.tag_id in self.obstacle_dict and not self.obstacle_avoid :
+                matching_obstacle = self.obstacle_dict[self.tag_info.tag_id]
+                speed = matching_obstacle['speed']
+                pose = SETransform(self.se_pose.x + self.tag_info.x, self.se_pose.y + self.tag_info.y, self.line_theta)
+                self.obstacle = DuckieDriverObstacle(pose,speed,self.waypoint_lookahead/self.speed, self.lookahead_point)
+                self.tag_present = False
+            
+
+
             
             else:
+                self.tag_present = False
+            if self.obstacle_avoid:
                 self.tag_present = False
         else:
             self.tag_present = False
@@ -250,6 +286,7 @@ class DubinsNode:
             self.marker_pub.publish(next_node_marker)
 
         # Marker for lookahead point
+        
         if lookahead_point:
             lookahead_marker = Marker()
             lookahead_marker.header.frame_id = frame_id
@@ -297,6 +334,7 @@ class DubinsNode:
             segment_id += 1
         
         # Publish the last corner radius
+
         if self.corner:
             corner_marker = Marker()
             corner_marker.header.frame_id = "map"
@@ -324,8 +362,10 @@ class DubinsNode:
         theta_path = self.pursuit_path[:, 2]
         
         # Find the closest point on the path
+    
         distances = np.sqrt((x_path - self.se_pose.x)**2 + (y_path - self.se_pose.y)**2)
         closest_index = np.argmin(distances)
+
         if distances[-1] < lookahead_distance:
             closest_index = len(distances) -1 
 
@@ -360,12 +400,17 @@ class DubinsNode:
         #     self.need_to_fix_angle = True
         #     return 0,0 
         steering_angle = np.arctan2(2 * wheelbase * np.sin(alpha), lookahead_distance)
+
+        
+
         # rospy.loginfo(f"Steering angle: {steering_angle},angle delta {angle_delta} ,also angle gain {angle_gain}")
         # if lookahead_point[3] == 0:
         #     desired_angular_speed = steering_angle * wheelbase/2
         # else:
         #     desired_angular_speed = lookahead_point[3] 
+
         desired_angular_speed = lookahead_point[3] 
+
         self.desired_angular_speed.publish(Float32(desired_angular_speed))
         # Calculate the left and right wheel speeds
 
@@ -400,6 +445,31 @@ class DubinsNode:
             self.desired_wheel_cmd_pub.publish(wheels_cmd)
         else: 
             self.need_to_fix_angle = False
+    def u_turn(self,target_angle: float):
+        fixed_speed = 0.4
+        omega =  fixed_speed/(self.wheel_base/2)
+        rate = rospy.Rate(20)
+        angle_deviation = self.normalize_angle(target_angle) - self.normalize_angle(self.se_pose.theta)
+        time = 0.05
+        while angle_deviation > 0.05:
+            l_speed = 0#-fixed_speed*np.sign(angle_deviation)
+            r_speed = fixed_speed#*np.sign(angle_deviation)
+            wheels_cmd = WheelsCmdStamped()
+            wheels_cmd.header.stamp = rospy.Time.now()
+            wheels_cmd.vel_left = l_speed
+            wheels_cmd.vel_right = r_speed
+            self.desired_angular_speed.publish(0.0)
+            self.desired_wheel_cmd_pub.publish(wheels_cmd)
+            rospy.sleep(time)
+            wheels_cmd = WheelsCmdStamped()
+            wheels_cmd.header.stamp = rospy.Time.now()
+            wheels_cmd.vel_left = 0
+            wheels_cmd.vel_right = 0
+            self.desired_wheel_cmd_pub.publish(wheels_cmd)
+            angle_deviation = self.normalize_angle(target_angle) - self.normalize_angle(self.se_pose.theta)
+            rate.sleep()
+        self.tag_info = None
+        self.shutdown_duckie()
 
     def check_completion(self):
         dist_to_end = np.sqrt((self.se_pose.x - self.pursuit_path[-1,0])**2 + (self.se_pose.y - self.pursuit_path[-1,1])**2)
@@ -499,7 +569,7 @@ class DubinsNode:
                 # print(f'tag {self.tag_present}, target id {self.next_node.tag_id}, observed id {self.tag_info.tag_id}')
 
             # If the next_node is in scope and the tag matches, move on to the next node
-            if self.node_in_scope and self.tag_present:
+            if self.node_in_scope and self.tag_present :
                 rospy.loginfo(f"Moving to next node")
                 self.corner = self.next_node.corner
                 self.next_node = self.path.pop(0)#self.next_node.next
@@ -510,14 +580,23 @@ class DubinsNode:
                 self.tag_present = False
                 self.tag_info = None
                 self.get_line()  # Update line for new node
-                
+            
 
             # If we have a next_node but no line yet, compute it
             if self.next_node and self.line is None:
                 self.get_line()
 
-            lookahead_point = self.get_line_lookahead()
-            if lookahead_point and self.do_dubins and not self.running_dubs:
+            self.lookahead_point = self.get_line_lookahead()
+            lookahead_point = self.lookahead_point
+            if self.obstacle != None  and not self.obstacle_avoid:
+
+                rospy.loginfo(f"SUUUUPER DANGER, lets dash and burn rubber")
+                self.u_turn(self.se_pose.theta + np.pi)
+
+
+                
+                
+            elif lookahead_point and self.do_dubins and not self.running_dubs:
 
                 goal_pose =  self.next_node.pose
                 
@@ -544,8 +623,10 @@ class DubinsNode:
                 self.pursuit_path = temp_path_array
                 self.running_dubs = True
                 self.do_dubins = False
-            elif not self.do_dubins and not self.running_dubs:
-                # rospy.loginfo(f'only lane following')
+
+            elif not self.do_dubins and not self.running_dubs and not self.obstacle_avoid:
+                rospy.loginfo(f'only lane following')
+
                 temp_line = self.get_temp_line(self.se_pose, lookahead_point)
                 self.duckie_path =  [DuckieSegment(self.se_pose, lookahead_point, 0, 'STRAIGHT',temp_line,cost = 1,speed = self.speed)]
                 self.publish_path_markers()
@@ -555,13 +636,20 @@ class DubinsNode:
                     temp_path_array = np.vstack((temp_path_array, partial))
                 self.pursuit_path = temp_path_array
                 l_speed, r_speed =self.pure_pursuit_control(self.pursuit_path, 0.12, 0.102, self.speed)
-                l_speed = 0
-                r_speed = 0
+                
 
 
 
             
-
+            if self.obstacle_avoid:
+                rospy.loginfo(f"DANGER DANGER")
+                if rospy.Time.now().to_sec() > self.timer:
+                    self.tag_info =None
+                    rospy.loginfo(f"danger over")
+                    self.obstacle_avoid = False
+                    self.timer = np.float('inf')
+                l_speed, r_speed =self.pure_pursuit_control(self.pursuit_path, 0.15, 0.102, self.speed)
+                
             
             if self.running_dubs:
                 # rospy.loginfo(f"doiiing the stuuf")
