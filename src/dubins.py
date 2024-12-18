@@ -153,7 +153,7 @@ class DubinsNode:
 
     def check_tag(self):
         if self.tag_info is not None:
-            rospy.loginfo(f"Tag {self.tag_info.tag_id} detected")
+            # rospy.loginfo(f"Tag {self.tag_info.tag_id} detected")
             if self.next_node.tag_id == self.tag_info.tag_id and self.tag_distance < 5*a:
                 #rospy.loginfo(f"Tag {self.tag_info.tag_id} is present, we moving on brahh")
                 self.tag_present = True
@@ -557,7 +557,7 @@ class DubinsNode:
     def run(self):
         rate = rospy.Rate(20)
         #init by popping the first node 
-        self.next_node = self.path.pop(0)
+        self.next_node = self.path[0]
         rospy.wait_for_message('/wheel_encoder/odom', Odometry)
         while not rospy.is_shutdown():
             
@@ -572,7 +572,7 @@ class DubinsNode:
             if self.node_in_scope and self.tag_present :
                 rospy.loginfo(f"Moving to next node")
                 self.corner = self.next_node.corner
-                self.next_node = self.path.pop(0)#self.next_node.next
+                self.next_node = self.next_node.next
                 if self.path == []:
                     self.path = hardcoded_path
                 self.do_dubins = True
