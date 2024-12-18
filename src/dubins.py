@@ -632,8 +632,10 @@ class DubinsNode:
                 self.publish_path_markers()
                 temp_path_array= np.empty((0,5))
                 for segment in self.duckie_path:
+                    rospy.logwarn(f"Segment end: ({segment.end.x},{segment.end.y})")
                     partial = segment.get_path_array()
                     temp_path_array = np.vstack((temp_path_array, partial))
+                rospy.loginfo(f"Path array: {temp_path_array}")
                 self.pursuit_path = temp_path_array
                 l_speed, r_speed =self.pure_pursuit_control(self.pursuit_path, 0.12, 0.102, self.speed)
                 

@@ -46,7 +46,6 @@ standalone_tags:
     {id: 390, size: 0.060, name: static, speed: 0.0, width: 0.15 , length: 0.20,position: [0, 0],orientation: [1.0, 0.0, 0.0, 0.0]}, # [w,x,y,z] Orientation in global frame
     {id: 391, size: 0.060, name: dynamic, speed: 0.1, width: 0.15 , length: 0.20,position: [0,0],orientation: [1.0, 0.0, 0.0, 0.0]}, # [w,x,y,z] Orientation in global frame
   ]
-
 tag_bundles:
   [
   ]

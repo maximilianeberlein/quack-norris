@@ -7,6 +7,7 @@ from apriltag_ros.msg import AprilTagDetectionArray
 from sensor_msgs.msg import CompressedImage, Image, CameraInfo
 from geometry_msgs.msg import PoseStamped
 from duckietown_msgs.msg import WheelsCmdStamped, BoolStamped
+from duckietown_msgs.msg import WheelsCmdStamped, BoolStamped
 from std_msgs.msg import Int32MultiArray
 from cv_bridge import CvBridge
 import os
@@ -47,6 +48,7 @@ class MainNode:
         self.rect_pub = rospy.Publisher(f'/{self.bot_name}/camera_node/rect/image_rect', Image, queue_size=1)
         self.rect_info_pub = rospy.Publisher(f'/{self.bot_name}/camera_node/rect/camera_info', CameraInfo, queue_size=1)
         self.tag_ids_pub = rospy.Publisher(f'/{self.bot_name}/detected_tags', Int32MultiArray, queue_size=10)
+        self.line_follow_pub = rospy.Publisher(f"/{self.bot_name}/joy_mapper_node/joystick_override", BoolStamped, queue_size=1)
 
         # Define the wheel command message
         self.wheel_cmd = WheelsCmdStamped()
