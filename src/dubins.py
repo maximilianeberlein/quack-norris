@@ -135,11 +135,13 @@ class DubinsNode:
                 pose = SETransform(self.se_pose.x + self.tag_info.x, self.se_pose.y + self.tag_info.y, self.line_theta)
                 self.obstacle = DuckieDriverObstacle(pose,speed,self.waypoint_lookahead/self.speed, self.lookahead_point)
                 self.tag_present = False
-
+            
 
 
             
             else:
+                self.tag_present = False
+            if self.obstacle_avoid:
                 self.tag_present = False
         else:
             self.tag_present = False
@@ -332,9 +334,11 @@ class DubinsNode:
         theta_path = self.pursuit_path[:, 2]
         
         # Find the closest point on the path
+    
         distances = np.sqrt((x_path - self.se_pose.x)**2 + (y_path - self.se_pose.y)**2)
         closest_index = np.argmin(distances)
-
+        if lookahead_distance > distances[-1]:
+            closest_index = len(distances)-1
 
         # Find the lookahead point
         lookahead_index = closest_index
@@ -365,10 +369,11 @@ class DubinsNode:
         #     self.need_to_fix_angle = True
         #     return 0,0 
         steering_angle = np.arctan2(2 * wheelbase * np.sin(alpha), lookahead_distance)
-        # rospy.loginfo(f"Steering angle: {steering_angle},angle delta {angle_delta} ,also angle gain {angle_gain}")
+        rospy.loginfo(f"Steering angle: {steering_angle}")
         
-        desired_angular_speed = lookahead_point[3] 
-        self.desired_angular_speed.publish(Float32(desired_angular_speed))
+        desired_angular_speed = steering_angle/wheelbase/2#lookahead_point[3] 
+
+        self.desired_angular_speed.publish(Float32(np.sign(alpha)*desired_angular_speed))
         # Calculate the left and right wheel speeds
 
         
@@ -521,7 +526,8 @@ class DubinsNode:
             if self.obstacle != None  and not self.obstacle_avoid:
 
                 rospy.loginfo(f"SUUUUPER DANGER")
-                goal_pose =  self.decrease_lookahead(self.lookahead_point, 0.5)
+                goal_pose =  self.next_node.pose
+                goal_pose =  self.decrease_lookahead(goal_pose, -0.5)
                 first_pose, second_pose = self.obstacle.get_poses_dubins(self.se_pose)
 
                 
@@ -533,11 +539,11 @@ class DubinsNode:
                 if self.check_collision([self.obstacle.obstacle],self.duckie_path):
                     rospy.loginfo(f"Collision detected, recalculating path,goal pose{goal_pose.x,goal_pose.y}")
                     
-                    dub1 = dubins(self.se_pose,first_pose, 3, self.speed, 0.2, self.obstacle.radius)
+                    dub1 = dubins(self.se_pose,first_pose, 3, self.speed, 0.05, self.obstacle.radius)
 
                     dub2 = dubins(first_pose,second_pose, 3,self.speed, self.obstacle.radius, self.obstacle.radius)
 
-                    dub3 = dubins(second_pose, goal_pose, 3, self.speed, self.obstacle.radius, 0.2)
+                    dub3 = dubins(second_pose, goal_pose, 3, self.speed, self.obstacle.radius, 0.05)
                     result1 = dub1.solve()
                     result2 = dub2.solve()
                     result3 = dub3.solve()
@@ -553,8 +559,9 @@ class DubinsNode:
                 self.obstacle_avoid = True
 
                 self.obstacle =None
+                self.tag_info =None
                 self.do_dubins = False
-                self.timer = rospy.Time.now().to_sec() + self.waypoint_lookahead/self.speed
+                self.timer = rospy.Time.now().to_sec() + 4
             elif lookahead_point and self.do_dubins and not self.running_dubs:
 
                 goal_pose =  self.next_node.pose
@@ -582,7 +589,7 @@ class DubinsNode:
                 self.pursuit_path = temp_path_array
                 self.running_dubs = True
                 self.do_dubins = False
-            elif not self.do_dubins and not self.running_dubs:
+            elif not self.do_dubins and not self.running_dubs and not self.obstacle_avoid:
                 rospy.loginfo(f'only lane following')
                 temp_line = self.get_temp_line(self.se_pose, lookahead_point)
                 self.duckie_path =  [DuckieSegment(self.se_pose, lookahead_point, 0, 'STRAIGHT',temp_line,cost = 1,speed = self.speed)]
@@ -602,10 +609,12 @@ class DubinsNode:
             if self.obstacle_avoid:
                 rospy.loginfo(f"DANGER DANGER")
                 if rospy.Time.now().to_sec() > self.timer:
+                    self.tag_info =None
+                    rospy.loginfo(f"danger over")
                     self.obstacle_avoid = False
                     self.timer = np.float('inf')
-                l_speed, r_speed =self.pure_pursuit_control(self.pursuit_path, 0.04, 0.102, self.speed)
-
+                l_speed, r_speed =self.pure_pursuit_control(self.pursuit_path, 0.15, 0.102, self.speed)
+                
             
             if self.running_dubs:
                 rospy.loginfo(f"doiiing the stuuf")
