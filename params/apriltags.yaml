@@ -41,8 +41,8 @@ standalone_tags:
     {id: 20, size: 0.065, name: Stop, position: [0.15, 1.65], orientation: [1.0, 0.0, 0.0, 0.0]}, # [w,x,y,z] Orientation in global frame
     {id: 392, size: 0.06, name: Yield, position: [2.75, 1.65], orientation: [0.7071068, 0.0, 0.0, -0.7071068]}, # [w,x,y,z] Orientation in global frame
     {id: 74, size: 0.065, name: traffic light, position: [2.75, 0.15], orientation: [0.0, 0.0, 0.0, 1.0]}, # [w,x,y,z] Orientation in global frame
-    {id: 168, size: 0.065, name: one way, position: [1.50, 1.80],orientation: [1.0, 0.0, 0.0, 0.0]}, # Orientation via normal vector
-    {id: 386, size: 0.060, name: Slow Xing, position: [1.50, 0.6], orientation: [0.0, 0.0, 0.0, 1.0]}, # Orientation via normal vector
+    {id: 168, size: 0.065, name: one way, position: [1.50, 1.770],orientation: [1.0, 0.0, 0.0, 0.0]}, # Orientation via normal vector
+    {id: 386, size: 0.060, name: Slow Xing, position: [1.50, 0.0], orientation: [0.0, 0.0, 0.0, 1.0]}, # Orientation via normal vector
     {id: 390, size: 0.060, name: static, speed: 0.0, width: 0.15 , length: 0.20,position: [0, 0],orientation: [1.0, 0.0, 0.0, 0.0]}, # [w,x,y,z] Orientation in global frame
     {id: 391, size: 0.060, name: dynamic, speed: 0.1, width: 0.15 , length: 0.20,position: [0,0],orientation: [1.0, 0.0, 0.0, 0.0]}, # [w,x,y,z] Orientation in global frame
   ]

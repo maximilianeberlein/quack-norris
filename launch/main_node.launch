@@ -39,9 +39,9 @@
     </node>
 
     <!-- Launch the global planner node -->
-    <node pkg="quack_norris" type="map_service_node.py" name="global_planner" output="screen">
+    <!-- <node pkg="quack_norris" type="map_service_node.py" name="global_planner" output="screen">
         <param name="map_name" value="main_map"/>
-    </node>
+    </node> -->
 
     <node pkg="tf" type="static_transform_publisher" name="map_to_odom" args="0 0 0 0 0 0 map odom 100" />
 </launch>

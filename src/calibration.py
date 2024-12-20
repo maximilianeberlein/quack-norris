@@ -33,6 +33,8 @@ class Calibration:
         self.curr_right_ticks = 0
         self.previous_left_ticks = 0
         self.previous_right_ticks = 0
+        self.target_l =[]
+        self.target_r = []
         
         self.imu_yaw_vel_array = []
         self.imu_yaw_vel = 0.0
@@ -86,114 +88,158 @@ class Calibration:
         self.theta = rotation[2]
 
     def run(self):
-        rate = rospy.Rate(10)
+        rate = rospy.Rate(20)
         rospy.wait_for_message('/wheel_encoder/odom', Odometry)
         timer = rospy.Time.now()
         while not rospy.is_shutdown():
-            # if rospy.Time.now() - timer > rospy.Duration(65):
-            #     wheel_cmd = WheelsCmdStamped()
-            #     wheel_cmd.header.stamp = rospy.Time.now()
-            #     wheel_cmd.vel_left = 0
-            #     wheel_cmd.vel_right = 0
-            #     self.wheel_cmd_pub.publish(wheel_cmd)
-            #     plt.plot(self.left_speed)
-    
-            #     plt.axhline(y=self.desired_speed_actual, color='r', linestyle='--')
-            #     plt.grid()
-
-            #     plt.plot(self.right_speed)
-            #     plt.savefig('/code/catkin_ws/src/user_code/quack-norris/plots/calibration.png')
-            #     rospy.signal_shutdown("Reached target position")
-            # elif rospy.Time.now() - timer > rospy.Duration(45):
-            feed_forward_timer = (np.pi/12) /0.5
-            count = 1
-            
-            while count<= 7:  # Example duration for the loop
-                # Publish the command
-                
-                feed_forward = feed_forward_timer*count
-                print(f' sector = {np.rad2deg(count*feed_forward_timer/2)}')
+            if rospy.Time.now() - timer > rospy.Duration(90):
+    # After 90 seconds, stop everything
                 wheel_cmd = WheelsCmdStamped()
                 wheel_cmd.header.stamp = rospy.Time.now()
-                wheel_cmd.vel_left = 0.275 / self.v_max
-                wheel_cmd.vel_right = 0.325 / self.v_max
-                self.desired_wheel_cmd_pub.publish(wheel_cmd)
-                self.desired_angular_speed.publish(Float32(data=0.5))
-                
-                # Sleep for feed_forward_timer
-                rospy.sleep(feed_forward)
-                
-                # Set the speed to 0
                 wheel_cmd.vel_left = 0
                 wheel_cmd.vel_right = 0
-                self.desired_wheel_cmd_pub.publish(wheel_cmd)
-                self.desired_angular_speed.publish(Float32(data=0))
-                rospy.sleep(1)
+                self.wheel_cmd_pub.publish(wheel_cmd)
+                plt.plot(self.left_speed)
+                plt.plot(self.target_l, '--')
+                plt.grid()
+                plt.plot(self.right_speed)
+                plt.plot(self.target_r, '--')
+                plt.savefig('/code/catkin_ws/src/user_code/quack-norris/plots/calibration_l_curve.png')
+                rospy.signal_shutdown("Completed all three circles")
+            else:
+                # Run circles in three phases of 30 seconds each
+                elapsed = (rospy.Time.now() - timer).to_sec()
 
-                count +=1 
-            
-            
-            
-            feed_forward_timer = (np.pi/12) /1
-            count = 1
+                # We define an angular speed of 1.0 rad/s for convenience
+                v = 0.2
+                wheel_base = 0.102
                 
-            while count<=7:  # Example duration for the loop
-                # Publish the command
-                feed_forward = feed_forward_timer*count
-                print(f' sector = {np.rad2deg(count*feed_forward_timer)}')
-                wheel_cmd = WheelsCmdStamped()
-                wheel_cmd.header.stamp = rospy.Time.now()
-                wheel_cmd.vel_left = 0.249/self.v_max
-                wheel_cmd.vel_right = 0.351/self.v_max
-                self.desired_wheel_cmd_pub.publish(wheel_cmd)
-                self.desired_angular_speed.publish(Float32(data=1.0))
+                # Determine the radius and corresponding wheel speeds based on elapsed time
+                # Phase 1 (0-30s): R = 0.15m
+                # Phase 2 (30-60s): R = 0.3m
+                # Phase 3 (60-90s): R = 0.45m
                 
-                # Sleep for feed_forward_timer
-                rospy.sleep(feed_forward)
+                if elapsed <= 15:
+                    R = 0.15
+                    # Given R and w, linear speed v = R * w
+                    w = -v/R
+                    # For a differential drive:
+                    # v_r = v + w*(wheel_base/2)
+                    # v_l = v - w*(wheel_base/2)
+                    v_r = 0.1#v + w*(wheel_base/2)
+                    v_l = 0.4#v - w*(wheel_base/2)
+                    self.target_l.append(v_l)
+                    self.target_r.append(v_r)
+                    # Scale by v_max if needed
+                    wheel_cmd = WheelsCmdStamped()
+                    wheel_cmd.header.stamp = rospy.Time.now()
+                    wheel_cmd.vel_left = v_l / self.v_max
+                    wheel_cmd.vel_right = v_r / self.v_max
+                    self.wheel_cmd_pub.publish(wheel_cmd)
+                    
+                    #self.desired_angular_speed.publish(Float32(data=w))
+                elif elapsed <= 30:
+                    R = 0.15
+                    # Given R and w, linear speed v = R * w
+                    w = -v/R
+                    # For a differential drive:
+                    # v_r = v + w*(wheel_base/2)
+                    # v_l = v - w*(wheel_base/2)
+                    v_r = 0.1#v + w*(wheel_base/2)
+                    v_l = 0.4#v - w*(wheel_base/2)
+                    self.target_l.append(v_l)
+                    self.target_r.append(v_r)
+                    # Scale by v_max if needed
+                    wheel_cmd = WheelsCmdStamped()
+                    wheel_cmd.header.stamp = rospy.Time.now()
+                    wheel_cmd.vel_left = v_l / self.v_max
+                    wheel_cmd.vel_right = v_r / self.v_max
+                    self.desired_wheel_cmd_pub.publish(wheel_cmd)
+                    
+                    self.desired_angular_speed.publish(Float32(data=w))
+                elif elapsed <= 45:
+                    R = 0.30
+                    
+                    # Given R and w, linear speed v = R * w
+                    w = -v/R
+                    # For a differential drive:
+                    # v_r = v + w*(wheel_base/2)
+                    # v_l = v - w*(wheel_base/2)
+                    v_r = v + w*(wheel_base/2)
+                    v_l = v - w*(wheel_base/2)
+                    self.target_l.append(v_l)
+                    self.target_r.append(v_r)
+                    # Scale by v_max if needed
+                    wheel_cmd = WheelsCmdStamped()
+                    wheel_cmd.header.stamp = rospy.Time.now()
+                    wheel_cmd.vel_left = v_l / self.v_max
+                    wheel_cmd.vel_right = v_r / self.v_max
+                    self.wheel_cmd_pub.publish(wheel_cmd)
+                    
+                    # self.desired_angular_speed.publish(Float32(data=w))
+                elif elapsed <= 60:
+                    R = 0.3
+                    # Given R and w, linear speed v = R * w
+                    w = -v/R
+                    # For a differential drive:
+                    # v_r = v + w*(wheel_base/2)
+                    # v_l = v - w*(wheel_base/2)
+                    v_r = v + w*(wheel_base/2)
+                    v_l = v - w*(wheel_base/2)
+                    self.target_l.append(v_l)
+                    self.target_r.append(v_r)
+                    # Scale by v_max if needed
+                    wheel_cmd = WheelsCmdStamped()
+                    wheel_cmd.header.stamp = rospy.Time.now()
+                    wheel_cmd.vel_left = v_l / self.v_max
+                    wheel_cmd.vel_right = v_r / self.v_max
+                    self.desired_wheel_cmd_pub.publish(wheel_cmd)
+                    
+                    self.desired_angular_speed.publish(Float32(data=w))
                 
-                # Set the speed to 0
-                wheel_cmd.vel_left = 0
-                wheel_cmd.vel_right = 0
-                self.desired_wheel_cmd_pub.publish(wheel_cmd)
-                self.desired_angular_speed.publish(Float32(data=0))
-                rospy.sleep(1)
-    
-                count +=1 
-            
-            
+                elif elapsed <= 75:
+                    R = 0.45
+                   
+                    # Given R and w, linear speed v = R * w
+                    w = -v/R
+                    # For a differential drive:
+                    # v_r = v + w*(wheel_base/2)
+                    # v_l = v - w*(wheel_base/2)
+                    v_r = v + w*(wheel_base/2)
+                    v_l = v - w*(wheel_base/2)
+                    self.target_l.append(v_l)
+                    self.target_r.append(v_r)
+                    # Scale by v_max if needed
+                    wheel_cmd = WheelsCmdStamped()
+                    wheel_cmd.header.stamp = rospy.Time.now()
+                    wheel_cmd.vel_left = v_l / self.v_max
+                    wheel_cmd.vel_right = v_r / self.v_max
+                    self.wheel_cmd_pub.publish(wheel_cmd)
+                    
+                    # self.desired_angular_speed.publish(Float32(data=w))
+                elif elapsed <= 90:
+                    R = 0.45
+                    # Given R and w, linear speed v = R * w
+                    w = -v/R
+                    # For a differential drive:
+                    # v_r = v + w*(wheel_base/2)
+                    # v_l = v - w*(wheel_base/2)
+                    v_r = v + w*(wheel_base/2)
+                    v_l = v - w*(wheel_base/2)
+                    self.target_l.append(v_l)
+                    self.target_r.append(v_r)
+                    # Scale by v_max if needed
+                    wheel_cmd = WheelsCmdStamped()
+                    wheel_cmd.header.stamp = rospy.Time.now()
+                    wheel_cmd.vel_left = v_l / self.v_max
+                    wheel_cmd.vel_right = v_r / self.v_max
+                    self.desired_wheel_cmd_pub.publish(wheel_cmd)
+                    
+                    self.desired_angular_speed.publish(Float32(data=w))
+                    
                 
-        
-            feed_forward_timer = (np.pi/12) /1
-            count = 1
-            while count<=7:  # Example duration for the loop
-                # Publish the command
-                feed_forward = feed_forward_timer*count
-                print(f' sector = {np.rad2deg(count*feed_forward_timer)}')
-                wheel_cmd = WheelsCmdStamped()
-                wheel_cmd.header.stamp = rospy.Time.now()
-                wheel_cmd.vel_left = 0.05/self.v_max
-                wheel_cmd.vel_right = 0.15/self.v_max
-                self.desired_wheel_cmd_pub.publish(wheel_cmd)
-                self.desired_angular_speed.publish(Float32(data=1.0))
-                
-                # Sleep for feed_forward_timer
-                rospy.sleep(feed_forward)
-                
-                # Set the speed to 0
-                wheel_cmd.vel_left = 0
-                wheel_cmd.vel_right = 0
-                self.desired_wheel_cmd_pub.publish(wheel_cmd)
-                self.desired_angular_speed.publish(Float32(data=0))
-                rospy.sleep(1)
-
-                count +=1 
-                
-            rospy.signal_shutdown("Reached target position")
-            
-                
-            
-                
-            rate.sleep()
+                    
+                rate.sleep()
 if __name__ == '__main__':
     node = Calibration()
     node.run()

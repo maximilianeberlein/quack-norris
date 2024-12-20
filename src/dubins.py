@@ -86,7 +86,7 @@ class DubinsNode:
         self.tag_distance = 10
         
         self.node_lookahead = 6*a
-        self.waypoint_lookahead = 8.5*a
+        self.waypoint_lookahead = 10.0*a
         self.next_node = None
         self.node_in_scope = False
         self.tag_present = False
@@ -96,7 +96,8 @@ class DubinsNode:
         self.duckie_path = None
         self.pursuit_path = None
         self.running_dubs = False
-        self.speed = 0.2
+        self.speed = 0.4
+
         self.v_max = 0.8
         self.do_dubins = False
         self.need_to_fix_angle = False
@@ -154,7 +155,7 @@ class DubinsNode:
     def check_tag(self):
         if self.tag_info is not None:
             rospy.loginfo(f"Tag {self.tag_info.tag_id} detected")
-            if self.next_node.tag_id == self.tag_info.tag_id and self.tag_distance < 5*a:
+            if self.next_node.tag_id == self.tag_info.tag_id and self.tag_distance < 9*a:
                 #rospy.loginfo(f"Tag {self.tag_info.tag_id} is present, we moving on brahh")
                 self.tag_present = True
             elif self.tag_info.tag_id in self.obstacle_dict and not self.obstacle_avoid :
@@ -425,17 +426,19 @@ class DubinsNode:
         return (angle + np.pi) % (2 * np.pi) - np.pi
 
     def complete_heading_correction(self,target_angle: float):
-        fixed_speed = 0.2
+        fixed_speed = 0.4
         omega =  fixed_speed/(self.wheel_base/2)
         angle_deviation = self.normalize_angle(target_angle) - self.normalize_angle(self.se_pose.theta)
         time = 0.05
-        if np.abs(angle_deviation) > 0.1:
+        rate = rospy.Rate(20)
+        while angle_deviation > 0.05:
             l_speed = -fixed_speed*np.sign(angle_deviation)
             r_speed = fixed_speed*np.sign(angle_deviation)
             wheels_cmd = WheelsCmdStamped()
             wheels_cmd.header.stamp = rospy.Time.now()
             wheels_cmd.vel_left = l_speed
             wheels_cmd.vel_right = r_speed
+            self.desired_angular_speed.publish(0.0)
             self.desired_wheel_cmd_pub.publish(wheels_cmd)
             rospy.sleep(time)
             wheels_cmd = WheelsCmdStamped()
@@ -443,8 +446,8 @@ class DubinsNode:
             wheels_cmd.vel_left = 0
             wheels_cmd.vel_right = 0
             self.desired_wheel_cmd_pub.publish(wheels_cmd)
-        else: 
-            self.need_to_fix_angle = False
+            angle_deviation = self.normalize_angle(target_angle) - self.normalize_angle(self.se_pose.theta)
+            rate.sleep()
     def u_turn(self,target_angle: float):
         fixed_speed = 0.4
         omega =  fixed_speed/(self.wheel_base/2)
@@ -557,7 +560,7 @@ class DubinsNode:
     def run(self):
         rate = rospy.Rate(20)
         #init by popping the first node 
-        self.next_node = self.path.pop(0)
+        self.next_node = self.path[0]
         rospy.wait_for_message('/wheel_encoder/odom', Odometry)
         while not rospy.is_shutdown():
             
@@ -569,13 +572,15 @@ class DubinsNode:
                 # print(f'tag {self.tag_present}, target id {self.next_node.tag_id}, observed id {self.tag_info.tag_id}')
 
             # If the next_node is in scope and the tag matches, move on to the next node
-            if self.node_in_scope and self.tag_present :
+            if self.tag_present :
                 rospy.loginfo(f"Moving to next node")
+                # self.complete_heading_correction(self.pursuit_path[-1,2])
                 self.corner = self.next_node.corner
-                self.next_node = self.path.pop(0)#self.next_node.next
+                self.next_node = self.next_node.next
                 if self.path == []:
                     self.path = hardcoded_path
                 self.do_dubins = True
+                self.running_dubs = False
                 self.node_in_scope = False
                 self.tag_present = False
                 self.tag_info = None
@@ -598,10 +603,9 @@ class DubinsNode:
                 
             elif lookahead_point and self.do_dubins and not self.running_dubs:
 
-                goal_pose =  self.next_node.pose
+                goal_pose =  lookahead_point
                 
                 self.desired_wheel_cmd_pub.publish(WheelsCmdStamped())
-                rospy.sleep(2)
                 # rospy.loginfo(f"Lookahead Point: x={lookahead_point.x}, y={lookahead_point.y}")
                 dub = dubins(self.se_pose,goal_pose,3,self.speed,0.2,0.2)
                 self.duckie_path = dub.solve()
@@ -612,7 +616,11 @@ class DubinsNode:
                     path1 = dub1.solve()
                     dub2 = dubins(self.corner.placement,goal_pose,3,self.speed,self.corner.radius,0.2)
                     path2= dub2.solve()
-                    self.duckie_path = np.concatenate((path1,path2)) 
+                    temp_line = self.get_temp_line(goal_pose, self.next_node.pose)
+                    temp_path =  [DuckieSegment(goal_pose, self.next_node.pose, 0, 'STRAIGHT',temp_line,cost = 1,speed = self.speed)]
+
+
+                    self.duckie_path = np.concatenate((path1,path2, temp_path)) 
                     print(self.duckie_path)
                 self.publish_path_markers()
 
@@ -655,7 +663,7 @@ class DubinsNode:
             
             if self.running_dubs:
                 # rospy.loginfo(f"doiiing the stuuf")
-                self.check_completion()
+                # self.check_completion()
                 l_speed, r_speed =self.pure_pursuit_control(self.pursuit_path, 0.12, 0.102, self.speed)
 
             wheels_cmd = WheelsCmdStamped()
@@ -664,11 +672,11 @@ class DubinsNode:
             wheels_cmd.vel_right = r_speed / self.v_max
             # rospy.loginfo(f"Left speed: {l_speed}, Right speed: {r_speed}")
             self.desired_wheel_cmd_pub.publish(wheels_cmd)
-            while self.need_to_fix_angle:
-                rospy.loginfo(f"Fixing angle deviation target angle: {np.rad2deg(self.pursuit_path[-1,2])} and current angle: {np.rad2deg(self.se_pose.theta)}")
+            # while self.need_to_fix_angle:
+            #     rospy.loginfo(f"Fixing angle deviation target angle: {np.rad2deg(self.pursuit_path[-1,2])} and current angle: {np.rad2deg(self.se_pose.theta)}")
                 
-                self.complete_heading_correction(self.pursuit_path[-1,2])
-                rate.sleep()
+            #     self.complete_heading_correction(self.pursuit_path[-1,2])
+            #     rate.sleep()
                 
 
             # Publish markers for visualization
