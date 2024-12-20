@@ -34,3 +34,6 @@ roslaunch quack_norris main_node.lauch
 ``` 
 
 To test the global planner, run `rosrun quack_norris map_service_node.py` and `rosrun quack_norris map_client_node.py` in separate terminals.
+
+If you want to additionally visualize the pose of the DuckieBot and AprilTags within a global map in RViz, you can run `roslaunch quack_norris visualization.launch map_name:="<name_of_map>"` in a separate terminal.
+You can choose any map defined in params/maps.yaml, such as "lap_middle". The visualization is computationally intensive, so it should be used for debugging purposes only.
