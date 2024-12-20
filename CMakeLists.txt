@@ -178,7 +178,7 @@ include_directories(
 
 catkin_install_python(PROGRAMS
   src/map_service_node.py
-  src/test_client_node.py
+  examples/test_client_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
