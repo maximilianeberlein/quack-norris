@@ -54,7 +54,7 @@ class OdometryNode:
         self.angular_speed = rospy.Publisher(f'/{self.bot_name}/angular_speed',Float32, queue_size=1)
         self.tf_broadcaster = tf.TransformBroadcaster()
 
-    def imu_callback(self, msg):
+    def imu_callback(self, msg) -> None:
         """
         Callback function for the IMU data.
         A running average of the yaw velocity is computed to counteract noise.
@@ -67,13 +67,13 @@ class OdometryNode:
         self.imu_yaw_vel_array.append(yaw_vel)
         self.imu_yaw_vel = np.mean(self.imu_yaw_vel_array)
         
-    def left_ticks_callback(self, msg):
+    def left_ticks_callback(self, msg) -> None:
         self.curr_left_ticks = msg.data
 
-    def right_ticks_callback(self, msg):
+    def right_ticks_callback(self, msg) -> None:
         self.curr_right_ticks = msg.data
 
-    def global_pose_callback(self, msg):
+    def global_pose_callback(self, msg) -> None:
         """
         Callback function for the global pose (x, y, theta) of the Duckiebot.
         """
@@ -87,7 +87,7 @@ class OdometryNode:
         _, _, yaw = euler_from_quaternion(quaternion)
         self.theta = yaw
                 
-    def compute_odometry(self):
+    def compute_odometry(self) -> None:
         """
         Compute and publish the odometry of the Duckiebot.
         """

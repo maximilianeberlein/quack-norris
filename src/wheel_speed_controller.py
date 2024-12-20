@@ -62,7 +62,7 @@ class WheelSpeedControllerNode:
         self.wheel_cmd_pub.publish(WheelsCmdStamped())
         rospy.sleep(1)
 
-    def left_ticks_callback(self, msg):
+    def left_ticks_callback(self, msg) -> None:
         """
         Callback for the left wheel encoder. Calculates the angular speed of the left wheel, given the number of ticks.
         """
@@ -79,7 +79,7 @@ class WheelSpeedControllerNode:
         self.previous_left_ticks = self.curr_left_ticks
         self.l_speed = (2*np.pi*self.wheel_radius*left_ticks)/(self.l_ticks_per_revolution*dt)
 
-    def right_ticks_callback(self, msg):
+    def right_ticks_callback(self, msg) -> None:
         """
         Callback for the right wheel encoder. Calculates the angular speed of the right wheel, given the number of ticks.
         """
@@ -96,13 +96,13 @@ class WheelSpeedControllerNode:
         self.previous_right_ticks = self.curr_right_ticks
         self.r_speed = (2*np.pi*self.wheel_radius*right_ticks)/(self.r_ticks_per_revolution*dt)
 
-    def angular_speed_callback(self, msg):
+    def angular_speed_callback(self, msg) -> None:
         self.angular_speed = msg.data
 
-    def desired_angular_speed_callback(self, msg):
+    def desired_angular_speed_callback(self, msg) -> None:
         self.desired_angular_speed = msg.data
 
-    def desired_wheel_speed_callback(self, msg):
+    def desired_wheel_speed_callback(self, msg) -> None:
         """
         Callback for the desired wheel speed. Calculates the error between the 
         desired and actual speed and applies a PID controller to correct it.
@@ -136,7 +136,7 @@ class WheelSpeedControllerNode:
         wheel_msg.vel_right = (desired_r_speed + u_r)/0.8
         self.wheel_cmd_pub.publish(wheel_msg)
 
-    def pid_correction_speed(self, desired_speed, current_speed):
+    def pid_correction_speed(self, desired_speed: float, current_speed: float) -> float:
         """
         PID controller to correct the wheel speed.
         """
@@ -162,7 +162,7 @@ class WheelSpeedControllerNode:
         # Return the PID-corrected speed
         return kp * error + ki * self.speed_integral + kd * derivative
     
-    def pid_correction_angular(self, desired_theta_dot, current_theta_dot):
+    def pid_correction_angular(self, desired_theta_dot: float, current_theta_dot: float) -> float:
         """
         PID controller to correct the angular speed.
         """

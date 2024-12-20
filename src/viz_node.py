@@ -10,6 +10,8 @@ import numpy as np
 from nav_msgs.msg import Odometry
 from tf.transformations import euler_from_quaternion
 
+from typing import Optional
+
 
 class VizNode:
     """
@@ -63,23 +65,23 @@ class VizNode:
         self.initial_odom_pose = None
         self.initial_odom_orientation = None
 
-    def load_maps(self, yaml_file):
+    def load_maps(self, yaml_file: str) -> dict:
         with open(yaml_file, 'r') as file:
             data = yaml.safe_load(file)
         return data['maps']
 
-    def get_map_params(self, maps, map_name):
+    def get_map_params(self, maps: dict, map_name: str) -> Optional[dict]:
         for map_entry in maps:
             if map_entry['name'] == map_name:
                 return map_entry
         return None
 
-    def load_waypoints(self, yaml_file):
+    def load_waypoints(self, yaml_file: str) -> dict:
         with open(yaml_file, 'r') as file:
             data = yaml.safe_load(file)
         return data['standalone_tags']
 
-    def create_markers(self):
+    def create_markers(self) -> None:
         """
         Create the markers for the duckie, the map and the waypoints (i.e. apriltags).
         These can later be added manually in RViz.
@@ -206,7 +208,7 @@ class VizNode:
 
             self.marker_array.markers.append(arrow_marker)
     
-    def odom_callback(self, msg):
+    def odom_callback(self, msg) -> None:
         """
         Callback function that uses odometry to update the Duckiebot's position and orientation.
         """
@@ -265,7 +267,11 @@ class VizNode:
                 new_orientation.w
             )
 
-    def self_localization_callback(self, msg):
+    def self_localization_callback(self, msg) -> None:
+        """
+        Callback function that uses the apriltags to update the Duckiebot's position and orientation.
+        Publishes the global pose of the Duckiebot for use in RViz.
+        """
         closest_detection = None
         min_distance = float('inf')
 

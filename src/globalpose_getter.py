@@ -10,6 +10,8 @@ from quack_norris.msg import TagInfo
 import os
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
 
+from typing import Tuple
+
 
 class LocalizationNode:
     def __init__(self):
@@ -43,7 +45,7 @@ class LocalizationNode:
         self.pose_msg.header.frame_id = "map"
         self.pose_msg.pose.covariance = [1e-9 if i % 7 == 0 else 0 for i in range(36)] # Set covariance to zero for simplicity, we can adjust this as needed
         
-    def load_tags(self, yaml_file):
+    def load_tags(self, yaml_file: str) -> Tuple[list, list]:
         """
         Load waypoints and obstacles from a YAML file.
         """
@@ -66,7 +68,11 @@ class LocalizationNode:
         rospy.loginfo(f"Loaded {len(waypoints)} waypoints and {len(obstacles)} obstacles.")
         return waypoints, obstacles
 
-    def self_localization_callback(self, msg):
+    def self_localization_callback(self, msg) -> None:
+        """
+        Callback function for the AprilTag detection subscriber.
+        Publishes the global pose of the Duckiebot.
+        """
         closest_detection = None
         min_distance = float('inf')
 

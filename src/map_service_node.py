@@ -103,12 +103,10 @@ class MapServiceNode:
 
             # Remove planned next node from current node's neighbors, as it is blocked
             next_faulty_node = None
-            rospy.loginfo(f"Faulty node neighbors: {faulty_node.neighbors}")
             for index, node in enumerate(faulty_node.neighbors):
                 if node.center_index == next_node.center_index:
                     next_faulty_node = faulty_node.neighbors.pop(index)
                     break
-            # rospy.loginfo(f"Faulty node id: {faulty_node_id}. Is None? {faulty_node_id == None}")
             if next_faulty_node.apriltag_id == None:
                 rospy.logerr(f"While updating map: Planned next node {next_node} not found in faulty node's {faulty_node} neighbors - Should not happen. Exiting...")
                 exit(1)
@@ -123,15 +121,12 @@ class MapServiceNode:
                     # Remove apparent neighbours that previously were not neighbours, thus can't be neighbours now
                     if neighbour not in ([next_node.neighbors, next_node.center_index]) and neighbour not in ([faulty_node.neighbors, faulty_node.center_index]):
                         neighbour_positions.pop(index)
-                # rospy.logwarn(f"New node neighbors: {neighbour_positions}")
                 for neighbour_position in neighbour_positions:
                     neighbour_index = self.get_index_via_pos(neighbour_position)
                     if neighbour_index is not None:
                         neighbour = self.nodes[neighbour_index]
-                        # rospy.logwarn(f"Neighbor exists")
                         if neighbour.apriltag_id != next_faulty_node.apriltag_id:
                             start_node.neighbors.append(neighbour)
-                            # rospy.logwarn(f"Added neighbor {neighbour} to new node {start_node}")
                 updated_node_isnew = True
             else:
                 start_node = self.nodes[self.get_index_via_pos((x_ind, y_ind))]
@@ -144,6 +139,7 @@ class MapServiceNode:
 
         if shortest_path is not None:
             self.path = shortest_path
+            # # Plotting options, if desired
             # plot_solved_graph(self.nodes, shortest_path, f"/home/duckie/repos/quack-norris/src/solved_graph{rospy.get_time()}.png", self.map_name)
             # plot_solved_graph_with_progress(self.nodes, shortest_path, f"/home/duckie/repos/quack-norris/src/solved_graph_with_progress{rospy.get_time()}.png", self.map_name)
             full_path = fill_path_corners(shortest_path)
