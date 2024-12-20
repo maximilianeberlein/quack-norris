@@ -195,7 +195,6 @@ class DubinsNode:
         ##### get the line and its heading from current node and next node #####
         ##### the duckie will intersect this line to get the lookahead point #####
         self.line = sg.LineString([(self.next_node.parent.x,self.next_node.parent.y), (self.next_node.x, self.next_node.y)])
-        self.line = self.extend_line(self.line, 0.5)
         self.line_theta = np.arctan2(self.line.coords[1][1] - self.line.coords[0][1], self.line.coords[1][0] - self.line.coords[0][0])
     
 
@@ -209,7 +208,7 @@ class DubinsNode:
             return SETransform(self.next_node.x, self.next_node.y, self.line_theta)
         elif intersection.geom_type == 'Point':
             intersect = SETransform(intersection.x, intersection.y, self.line_theta)
-            return self.decrease_lookahead(intersect,-0.2)
+            return intersect
         ##### if the lookahead intersect at multiple points of the line #####
         # Convert MultiPoint to a list of Points
         elif intersection.geom_type == 'MultiPoint':
