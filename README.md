@@ -22,23 +22,15 @@ rosdep update
 
 before running the `rosdep install` command.
 
-2. Install pip dependencies
+2. Install additional pip dependencies
 ```
 pip install shapely pyquaternion
 ```
 
 ## Usage
-To launch our main code, including our global and local planners, odometry, apriltag_ros and low-level controllers, run
+To launch our main code, including our local planner, odometry, apriltag_ros and low-level controllers, run
 ```
 roslaunch quack_norris main_node.lauch
 ``` 
 
-To test the global planner, run (in separate terminals)
-```
-rosrun quack_norris map_service_node.py
-```
-
-and
-```
-rosrun quack_norris map_client_node.py
-```
+To test the global planner, run `rosrun quack_norris map_service_node.py` and `rosrun quack_norris map_client_node.py` in separate terminals.
