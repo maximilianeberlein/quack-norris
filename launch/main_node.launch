@@ -1,29 +1,46 @@
 <launch>
     <!-- Arguments -->
     <!-- <arg name="cam_frame" default="camera_frame" /> -->
-
-    <!-- Launch the AprilTag Detector Node -->
-    <node pkg="quack-norris" type="main_node.py" name="main_node" output="screen" />
+    <arg name="yaml_file" default="/code/catkin_ws/src/user_code/quack-norris/params/apriltags.yaml" />
+    <node pkg="quack_norris" type="globalpose_getter.py" name="globalpose_getter" output="screen">
+        <param name="yaml_file" value="$(arg yaml_file)" />
+    </node>
     
-    <rosparam command="load" file="$(find quack-norris)/params/apriltags.yaml" ns="apriltags" />
+    <node name='wheel_speed_controller' pkg='quack_norris' type='wheel_speed_controller.py' output='screen'/>
+    <node name="odom_node" pkg="quack_norris" type="odom.py" output="screen"/>
+    <!-- <node pkg="robot_localization" type="ekf_localization_node" name="ekf_localization" output="screen">
+        <rosparam command="load" file="$(find quack_norris)/config/ekf_config.yaml"/>
+    </node> -->
+    <!-- launch odom repuber -->
+    <!-- <node pkg="quack_norris" type="ekf_repub.py" name="odom_repuber" output="screen"/> -->
+    <node pkg="quack_norris" type="main_node.py" name="main_node" output="screen" />
+    <node pkg="quack_norris" type="dubins.py" name="dubins" output="screen" />
+    <!-- <node pkg="quack_norris" type="local_map_getter.py" name="tags" output="screen" /> -->
 
+    <rosparam command="load" file="$(find quack_norris)/params/apriltags.yaml" ns="apriltags" />
+
+    <!-- Launch the local planner node -->
+    <!-- <node pkg="quack_norris" type="local_planner.py" name="local_planner_node" output="screen" /> -->
+    <rosparam command="load" file="$(find quack_norris)/params/tag_map.yaml" ns="tag_map" />
+
+    
     <!-- Launch the apriltags2_ros Node -->
     <node pkg="apriltag_ros" type="apriltag_ros_continuous_node" name="apriltags" 
           clear_params="true" output="screen" launch-prefix="" required="true">
-        <remap from="image_rect" to="/$(env VEHICLE_NAME)/camera_node/rect" />
-        <remap from="camera_info" to="/$(env VEHICLE_NAME)/camera_node/camera_info" />
-        <!-- <param name="camera_frame" type="str" value="$(arg cam_frame)" /> -->
+        <remap from="image_rect" to="/$(env VEHICLE_NAME)/camera_node/rect/image_rect" />
+        <remap from="camera_info" to="/$(env VEHICLE_NAME)/camera_node/rect/camera_info" />
         
-        <param name="publish_tag_detections_image" type="bool" value="true" /> 
-        <param name="publish_tf" type="bool" value="true" />
+        <!-- <param name="image_transport" type="str" value="compressed" /> -->
+        <param name="publish_tag_detections_image" type="bool" value="false" /> 
+        <param name="publish_tf" type="bool" value="false" />
         <param name="tag_family" type="str" value="tag36h11" />
-        <param name="tag_border" type="int" value="1" />
-        <param name="tag_threads" type="int" value="2" />
-        <param name="tag_decimate" type="double" value="1.0" />
-        <param name="tag_blur" type="double" value="0.0" />
-        <param name="tag_refine_edges" type="bool" value="true" />
-        <param name="tag_refine_decode" type="bool" value="false" />
-        <param name="tag_refine_pose" type="bool" value="false" />
-        <param name="tag_debug" type="bool" value="true" />
+        <param name="tag_debug" type="bool" value="false" />
     </node>
+
+    <!-- Launch the global planner node -->
+    <!-- <node pkg="quack_norris" type="map_service_node.py" name="global_planner" output="screen">
+        <param name="map_name" value="main_map"/>
+    </node> -->
+
+    <node pkg="tf" type="static_transform_publisher" name="map_to_odom" args="0 0 0 0 0 0 map odom 100" />
 </launch>

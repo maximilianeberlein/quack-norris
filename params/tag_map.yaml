@@ -1,0 +1,11 @@
+tags:
+  - tag_id: 58
+    map_segment: "segment_A"
+    path:
+      - [[0, -1], [1, -1]]
+      - [[1, -1], [1, 0]]
+  - tag_id: 20
+    map_segment: "segment_B"
+    path:
+      - [[0.375, 0], [0.375, 0.375]]
+      - [[0.375,0.375], [0, 0.375]]

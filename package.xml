@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>quack-norris</name>
+  <name>quack_norris</name>
   <version>0.0.0</version>
   <description>The line_detection package</description>
 
@@ -67,6 +67,11 @@
   <exec_depend>rospy</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>std_srvs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+
+  
+  <build_depend>dynamic_reconfigure</build_depend>
+  <exec_depend>dynamic_reconfigure</exec_depend>
 
   <build_depend>message_generation</build_depend>
   <exec_depend>message_runtime</exec_depend>
